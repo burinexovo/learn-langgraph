@@ -9,3 +9,4 @@ __pycache__/
 .claude/
 .github/
 skill-usage.jsonl
+CLAUDE.md
