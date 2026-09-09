@@ -15,4 +15,5 @@ dependencies = [
     "langchain-mcp-adapters>=0.3",
     "langchain-anthropic>=0.3",
     "anthropic>=0.40",
+    "numpy>=1.26",
 ]

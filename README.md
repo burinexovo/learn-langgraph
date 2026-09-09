@@ -54,17 +54,36 @@ jupyter lab
 | 08 | `08_langgraph_streaming` | `stream_mode` 種類與除錯 |
 | 09 | `09_langgraph_multi_agent` | Supervisor pattern、subgraph |
 | 10 | `10_langgraph_persistence_deploy` | SqliteSaver/PostgresSaver、部署概念 |
-| 11 | `11_langsmith_observability` | LangSmith 追蹤與評估(選用,需要免費帳號才能看到 dashboard) |
-| 12 | `12_mcp_tools` | MCP 概念、本機 stdio MCP server、把 MCP 工具接進 `ToolNode` |
-| 13 | `13_provider_sdks` | 原生 OpenAI SDK / Anthropic (Claude) SDK 的工具呼叫格式對照 |
-| 14 | `14_capstone_it_ticket_agent` | Capstone:IT 支援工單 agent,整合前 14 份幾乎所有技巧 |
+| 11 | `11_langgraph_long_term_memory` | `BaseStore`/`InMemoryStore`:跨對話串的長期記憶,對照 `06` 的短期記憶 |
+| 12 | `12_langsmith_observability` | LangSmith 追蹤與評估(選用,需要免費帳號才能看到 dashboard) |
+| 13 | `13_mcp_tools` | MCP 概念、本機 stdio MCP server、遠端 streamable_http、把 MCP 工具接進 `ToolNode` |
+| 14 | `14_rag_retrieval` | RAG:Embeddings / VectorStore / 檢索接成 graph node |
+| 15 | `15_provider_sdks` | 原生 OpenAI SDK / Anthropic (Claude) SDK 的工具呼叫格式對照 |
+| 16 | `16_capstone_it_ticket_agent` | Capstone:IT 支援工單 agent,整合前面幾乎所有技巧 |
 
-`11` 是唯一一份沒辦法完全離線體驗核心價值的 notebook——LangSmith 的追蹤面板是雲端服務,
+每份 notebook(`00` 除外)開頭都有一段「**這份要學什麼**」的重點條列,方便先抓方向再細看。
+
+`12` 是唯一一份沒辦法完全離線體驗核心價值的 notebook——LangSmith 的追蹤面板是雲端服務,
 沒有本地等價物。程式碼一樣不需要 key 就能讀、能執行,只是看不到 trace 畫面。
 
-`12`、`14` 會啟動一個本機 MCP server(`notebooks/_mcp_server.py`,用官方 `mcp` SDK 寫的,
-透過 stdio 子行程溝通,不需要網路),示範怎麼把任何 MCP server 的工具接進 LangGraph 的
-`ToolNode`。
+`13`、`16` 會啟動一個本機 MCP server(`notebooks/_mcp_server.py`,用官方 `mcp` SDK 寫的),
+`13` 同時示範 stdio(子行程)與 streamable_http(本機 HTTP)兩種連線方式,示範怎麼把任何
+MCP server 的工具接進 LangGraph 的 `ToolNode`。
+
+## 這門課補了哪些「教科書常漏掉」的細節
+
+除了 LangGraph 的標準元件，這門課額外驗證並補進了幾個容易在其他教材裡被忽略、但正式環境
+會踩到的細節：
+
+- **`06`**:`trim_messages` 硬砍歷史 vs `SummarizationMiddleware` 用 AI 摘要壓縮、
+  Time Travel(從舊存檔分岔重跑)
+- **`05`**:`return_direct=True` 只有 `create_agent` 認得，手刻的 `tools_condition` 不會理它
+- **`04`**:`recursion_limit`——邏輯寫錯造成無限迴圈時的保險絲
+- **`03`**:`cache_policy` + `InMemoryCache`——同樣輸入不用重算
+- **`08`**:`stream_mode="custom"` + `get_stream_writer()`——State 之外的自訂進度回報
+- **`13`**:遠端 MCP(`streamable_http`)連線,不是只有本機 stdio
+
+這些多半是官方文件裡查得到、但教學文章很少提的角落，加減踩過一次印象會深很多。
 
 ## 版本資訊
 
@@ -77,6 +96,7 @@ jupyter lab
 - `langsmith` 0.12.2
 - `langchain-mcp-adapters` 0.3.2 / `mcp` 1.30.0
 - `openai` 3.10.0 / `anthropic` 1.4.0 / `langchain-anthropic` 1.7.1
+- `numpy` 2.5.3(`14` 的 `InMemoryVectorStore` 需要)
 
 `langchain` 1.x 已經移除舊版 `AgentExecutor`,官方入口統一成 `langchain.agents.create_agent`
 (底層就是編譯一個 LangGraph `StateGraph`)。API 表面跟 0.x 時期差異很大,規劃/撰寫每份
