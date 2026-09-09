@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+
+# Auto-provisioned tooling unrelated to this course's content
+.agents/
+.claude/
+.github/
+skill-usage.jsonl
