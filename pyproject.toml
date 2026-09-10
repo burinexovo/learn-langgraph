@@ -17,4 +17,5 @@ dependencies = [
     "anthropic>=0.40",
     "numpy>=1.26",
     "langchain-azure-ai>=1.2.3",
+    "pillow>=10.0",
 ]
