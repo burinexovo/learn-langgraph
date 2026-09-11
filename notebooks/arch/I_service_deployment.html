@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>架構 I（選配）— 把架構 A 服務化部署</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #5a5a5a; --border: #d8d8d8;
+    --accent: #475de3; --box-bg: #f5f6fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#15161a; --fg:#e8e8ec; --muted:#a3a3ad; --border:#33343a; --box-bg:#20222b; }
+  }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, "Noto Sans TC", system-ui, sans-serif;
+    max-width: 880px; margin: 0 auto; padding: 32px 20px 64px; line-height: 1.7; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.1rem; margin-top: 2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+  .badge { display:inline-block; background: var(--accent); color:#fff; border-radius: 6px;
+    padding: 2px 10px; font-size: .85rem; font-weight: 600; margin-bottom: .8em; }
+  .callout { background: var(--box-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; margin: 1em 0; }
+  .metric { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--box-bg); }
+  code { background: var(--box-bg); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 1.4em 0; }
+  .step { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; background: var(--box-bg);
+    flex: 1; min-width: 130px; }
+  .step .label { font-weight: 700; }
+  .step .sub { color: var(--muted); font-size: .82rem; margin-top: 2px; }
+  .arrow { color: var(--muted); font-size: 1.2rem; }
+  ul { padding-left: 1.3em; }
+  .footnote { color: var(--muted); font-size: .88rem; }
+</style>
+</head>
+<body>
+
+<span class="badge">架構 I · 選配</span>
+<h1>把架構 A 包成服務,而不是本機終端機腳本</h1>
+
+<p>這份不是一個新的節點邏輯設計——圖本身(<code>plan_slices</code>/<code>plan_waves</code>/
+<code>merge_wave</code>/<code>review_gate</code>/<code>human_checkpoint</code>…)完全沿用
+<code>A_full_custom_langgraph.ipynb</code>。這一頁只回答一個問題:<b>如果要讓部門多人共用
+這個 graph,而不是每個人自己在終端機跑一份,部署形態要怎麼改?</b>屬於「日後真的要推廣使用」
+才需要處理的層次,不影響現在該不該先做架構 A/H。</p>
+
+<div class="callout">
+  <div>人工介入次數(每個 change)</div>
+  <div class="metric">2</div>
+  <div class="footnote">跟架構 A 完全一樣——這一頁只改「核准動作發生在哪裡」(終端機
+  interrupt vs. 聊天訊息回覆),不改核准次數本身。</div>
+</div>
+
+<h2>從本機腳本到服務,實際改了什麼</h2>
+
+<div class="flow">
+  <div class="step"><div class="label">今天：本機腳本</div><div class="sub">工程師自己的 terminal,自己 checkout 的 repo,<code>langgraph dev</code></div></div>
+  <div class="arrow">→</div>
+  <div class="step"><div class="label">langgraph build</div><div class="sub">同一份圖包成 Docker image</div></div>
+  <div class="arrow">→</div>
+  <div class="step"><div class="label">langgraph up</div><div class="sub">API server + Postgres + Redis,對外提供 REST/SDK 介面</div></div>
+  <div class="arrow">→</div>
+  <div class="step"><div class="label">薄前端</div><div class="sub">Slack 風格聊天介面,呼叫 API、接住 interrupt</div></div>
+</div>
+
+<h2>沒有因為「服務化」而自動解決的問題</h2>
+<ul>
+  <li><b>每次呼叫要對哪個使用者的哪個 repo/分支動手,服務本身不會自動知道</b>——呼叫端(前端)
+    要把這個資訊當參數傳進去,服務不能假設自己身上有一份固定的 checkout。</li>
+  <li><b>執行 <code>code_agent</code>/<code>git push</code> 的地方要嘛是每次請求各自獨立、
+    用完即丟的工作環境</b>(動態建 worktree),不能是服務自己身上一份共用的目錄——多人同時用,
+    共用目錄會互相踩到彼此正在改的檔案跟分支。</li>
+  <li><b>誰的 git 憑證</b>——服務要嘛用一個服務帳號憑證(要能對應回「這是哪個工程師發起的」
+    做稽核),要嘛想辦法讓每個使用者用自己的憑證(更安全,但實作複雜得多)。</li>
+</ul>
+
+<h2>跟架構 A(本機腳本版)的差異一覽</h2>
+<table>
+  <tr><th></th><th>架構 I(服務化)</th><th>架構 A(本機腳本)</th></tr>
+  <tr><td>圖邏輯</td><td>完全相同</td><td>—</td></tr>
+  <tr><td>觸發方式</td><td>API/SDK 呼叫,可以來自聊天機器人、其他系統</td><td>終端機打指令</td></tr>
+  <tr><td>核准介面</td><td>聊天訊息或前端按鈕,呼叫 <code>Command(resume=...)</code></td><td>終端機互動</td></tr>
+  <tr><td>新增基礎設施</td><td>API server、資料庫、憑證管理、每請求隔離的工作環境</td><td>不需要</td></tr>
+  <tr><td>適合階段</td><td>已驗證好用、要推廣給多人</td><td>先驗證想法、單人使用</td></tr>
+</table>
+
+<h2>建議的落地順序</h2>
+<p>先用架構 A(或更保守的 H)在本機把整套迴圈跑順、讓少數工程師實際用過,確認「兩次核准就好」
+這個體驗真的解決了痛點,再考慮往這一頁的服務化方向investment——不要為了假設的「以後很多人要用」
+提前把憑證管理、多租戶隔離這些基礎設施蓋好,那是等真的有多人使用需求時才該花的成本。</p>
+
+</body>
+</html>

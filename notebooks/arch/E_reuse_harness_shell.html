@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>架構 E — 沿用既有 harness,LangGraph 只做外殼服務化</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #5a5a5a; --border: #d8d8d8;
+    --accent: #475de3; --box-bg: #f5f6fb; --harness-bg: #fff4e6; --harness-border: #e0a458;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#15161a; --fg:#e8e8ec; --muted:#a3a3ad; --border:#33343a;
+      --box-bg:#20222b; --harness-bg:#2b2417; --harness-border:#a87a3a; }
+  }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, "Noto Sans TC", system-ui, sans-serif;
+    max-width: 880px; margin: 0 auto; padding: 32px 20px 64px; line-height: 1.7; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.15rem; margin-top: 2.2em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+  .badge { display:inline-block; background: var(--accent); color:#fff; border-radius: 6px;
+    padding: 2px 10px; font-size: .85rem; font-weight: 600; margin-bottom: .8em; }
+  .callout { background: var(--box-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; margin: 1em 0; }
+  .metric { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--box-bg); }
+  code { background: var(--box-bg); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+  .flow { display: flex; flex-direction: column; gap: 10px; margin: 1.5em 0; }
+  .row { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+  .step { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; background: var(--box-bg);
+    flex: 1; min-width: 140px; display: flex; flex-direction: column; justify-content: center; }
+  .step.harness { background: var(--harness-bg); border-color: var(--harness-border); }
+  .step .label { font-weight: 700; }
+  .step .sub { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+  .arrow { align-self: center; color: var(--muted); font-size: 1.3rem; padding: 0 2px; }
+  .arrow.down { transform: rotate(90deg); align-self: center; }
+  .harness-block { border: 2px dashed var(--harness-border); border-radius: 12px; padding: 14px; }
+  .harness-block > .title { font-size: .85rem; color: var(--harness-border); font-weight: 700; margin-bottom: 8px; }
+  ul { padding-left: 1.3em; }
+  .footnote { color: var(--muted); font-size: .88rem; }
+</style>
+</head>
+<body>
+
+<span class="badge">架構 E</span>
+<h1>沿用既有 harness,LangGraph 只做外殼服務化</h1>
+
+<p>這是「部門開發自動化」架構比較(見 <code>notebooks/arch/README.md</code>)裡的選項 E。
+跟架構 A/B/H 不同,這份不是一張新的 LangGraph 執行圖,而是一個策略性的問題:<b>要不要在
+LangGraph 裡把「切 slice → worktree 隔離平行 → 合併驗證 → 收斂判斷」這整套邏輯重刻一遍?
+</b>部門已經有一套跑得動、踩過真實 bug 修好的 <code>npspo-coding-workflow-setup</code>
+harness(靠 <code>inner-loop.js</code> 這個 Workflow script,呼叫 Claude Code 自己的 Task/
+subagent 機制)在做這件事。這個架構主張:<b>不重做,讓 LangGraph 只當外層</b>。</p>
+
+<div class="callout">
+  <div>人工介入次數(每個 change)</div>
+  <div class="metric">2</div>
+  <div class="footnote">對齊需求一次、驗收一次——這是三個「可行」架構(A / B / E)共同的底線,
+  差別只在中間怎麼把程式碼寫出來、複雜度放在哪一層。</div>
+</div>
+
+<h2>整體流程</h2>
+
+<div class="flow">
+  <div class="row">
+    <div class="step">
+      <div class="label">align_requirements</div>
+      <div class="sub">LangGraph 節點,人 ⇄ agent 對齊需求,含跨 change 的長期記憶(store)</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <div class="label">trigger_harness_run</div>
+      <div class="sub">LangGraph 節點,職責只有「觸發既有 harness 的 /npspo:apply 等價流程,等它跑完」</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <div class="label">human_checkpoint</div>
+      <div class="sub">LangGraph 節點,interrupt() 暫停,approve → push_or_mr / reject → 回 align_requirements</div>
+    </div>
+  </div>
+
+  <div class="arrow down">↓ trigger_harness_run 內部觸發的是這一整套(既有、已驗證,不重寫)</div>
+
+  <div class="harness-block">
+    <div class="title">既有 npspo harness(inner-loop.js,不動它)</div>
+    <div class="row">
+      <div class="step harness"><div class="label">分波</div><div class="sub">Depends/Touches 純程式邏輯</div></div>
+      <div class="arrow">→</div>
+      <div class="step harness"><div class="label">worktree 平行 implementer</div></div>
+      <div class="arrow">→</div>
+      <div class="step harness"><div class="label">合併 + 衝突降級序列重做</div></div>
+      <div class="arrow">→</div>
+      <div class="step harness"><div class="label">4 個平行 change-reviewer</div></div>
+    </div>
+  </div>
+</div>
+
+<h2>LangGraph 在這個架構裡實際新增的價值(harness 現在沒有的)</h2>
+<ul>
+  <li><b>跨 change 的長期記憶</b>——<code>store</code> 記住「上一輪人工回饋」「這類需求部門過去
+    的決定」,harness 本身沒有這種跨 run、跨 thread 的記憶機制。</li>
+  <li><b>可部署的 API 介面</b>——<code>langgraph build</code>/<code>up</code> 把這個外殼包成一個
+    服務,讓觸發跟核准可以來自「終端機以外的地方」(例如聊天機器人、其他內部系統),harness 目前
+    的核准入口是 Claude Code 終端機裡的 <code>/npspo:apply</code>。</li>
+  <li>統一 <code>human_checkpoint</code> 的核准語意,不管背後是 harness 還是別的執行引擎,人看到
+    的核准介面長得一樣。</li>
+</ul>
+
+<h2>跟架構 A 的差異一覽</h2>
+<table>
+  <tr><th></th><th>架構 E(這份)</th><th>架構 A</th></tr>
+  <tr><td>分波/worktree/合併/收斂邏輯</td><td>沿用既有 harness(JS,inner-loop.js),不重寫</td><td>在 LangGraph 裡用 Python 重新刻一遍</td></tr>
+  <tr><td>可觀測性</td><td>要看 harness 自己的 working-memory.md / state.json,或另外接橋接層轉成 LangGraph state</td><td>直接在 LangGraph state / LangSmith 裡看</td></tr>
+  <tr><td>開發成本</td><td>低——只寫「觸發 + 等結果」這一層</td><td>高——wave/merge/resolve 全部要自己寫、自己測</td></tr>
+  <tr><td>技術棧耦合</td><td>綁定 Claude Code 的 Workflow/Task 機制(harness 的執行引擎)</td><td>執行引擎可換(理論上不限定 Claude Code)</td></tr>
+  <tr><td>人工介入次數</td><td>2</td><td>2</td></tr>
+</table>
+
+<h2>這條路真正的成本:橋接層不是免費的</h2>
+<p>「LangGraph 觸發 harness、等它跑完」聽起來一句話,但 harness 目前的完成訊號、卡住訊號
+(<code>working-memory.md</code> 裡的「⚠️ 交還給人」段落、<code>state.json</code> 的
+<code>last_run_id</code>/<code>script_path</code>)是設計給**人在終端機裡讀**的,不是設計給
+另一個程式(LangGraph)去 poll、去解析、去轉換成自己的 <code>interrupt()</code> 語意的。
+<code>trigger_harness_run</code> 這個節點要嘛得寫一層「讀 harness 產出的檔案、判斷完成/卡住」
+的橋接邏輯,要嘛得改 harness 本身,讓它在完成/卡住時主動呼叫一個 LangGraph 能接住的 webhook/
+API——這層橋接工作本身不小,是這個架構省下 wave/merge 邏輯之後,換來的新工作項目,評估時要
+算進去,不是「幾乎不用寫東西」。</p>
+
+<h2>什麼時候該選這個</h2>
+<ul>
+  <li>部門已經很依賴、很信任現有 harness 的執行品質,不想冒風險換一套新邏輯。</li>
+  <li>近期真正想解決的是「怎麼讓核准/觸發不綁死在某個人的終端機 session 裡」,而不是「怎麼讓
+    平行開發邏輯更好」——這正是 E 補的那塊,不是它想解決的問題。</li>
+  <li>團隊沒有餘力同時維護兩套(LangGraph 版 + harness 版)wave/merge/收斂邏輯,寧可只維護一套。</li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>評估後不採用的選項</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #5a5a5a; --border: #d8d8d8;
+    --accent: #475de3; --box-bg: #f5f6fb; --ok-bg: #eaf7ec; --ok-border: #4caf6b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#15161a; --fg:#e8e8ec; --muted:#a3a3ad; --border:#33343a;
+      --box-bg:#20222b; --ok-bg:#193226; --ok-border:#3f9463; }
+  }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, "Noto Sans TC", system-ui, sans-serif;
+    max-width: 920px; margin: 0 auto; padding: 32px 20px 64px; line-height: 1.7; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.1rem; margin-top: 2em; }
+  .callout { background: var(--box-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; margin: 1.2em 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--box-bg); }
+  tr.partial { background: var(--ok-bg); }
+  tr.partial td:first-child { border-left: 3px solid var(--ok-border); }
+  code { background: var(--box-bg); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+  .stars { white-space: nowrap; color: var(--muted); }
+  .footnote { color: var(--muted); font-size: .88rem; }
+</style>
+</head>
+<body>
+
+<h1>評估後不採用的選項</h1>
+
+<p>這份表格是「部門開發自動化」架構比較(見 <code>notebooks/arch/README.md</code>)的附件——
+不是研究做得不夠、找不到更好的東西,而是<b>兩輪獨立調查(先廣泛掃五大類、再對 7 個 clone
+下來的 repo 做程式碼層級的深讀)都指向同一個結論</b>:GitHub 上目前沒有任何工具做到
+「切 slice → worktree 隔離平行 → 自動合併驗證 → 確定性收斂判斷」這一整條鏈——這正是部門
+既有 harness 跟這裡在設計的 LangGraph 版本(架構 A)要解決、業界目前都還沒解決的部分。
+以下是逐一評估過的候選,不建議再花時間重新調查。</p>
+
+<div class="callout">
+  <b>研究已收斂,不建議繼續往 GitHub 找。</b>兩輪調查方法不同(第一輪廣泛掃五大類找高星專案,
+  第二輪對 candidate 做實際程式碼閱讀,不只看 README),結論一致——這是收斂的證據,不是偷懶的
+  藉口。如果部門之後看到新的候選工具,判準就用下面表格的三個問題:①有沒有自動合併?
+  ②合併衝突/收斂判斷是不是確定性邏輯(不是 LLM 自己決定)?③一次任務啟動後,是不是真的能
+  「丟著不管」,不用逐輪對話?
+</div>
+
+<h2>逐一評估結果</h2>
+
+<table>
+  <tr><th>專案</th><th>Star 數</th><th>一句話結論</th><th>為什麼不採用</th></tr>
+
+  <tr>
+    <td><code>smtg-ai/claude-squad</code></td>
+    <td class="stars">8.5k ⭐</td>
+    <td>tmux + git worktree 管理多個 agent session</td>
+    <td>程式碼確認:狀態機只有 Running/Ready 兩態,隨時可以再送一句話進去(<code>SendPrompt()</code>);
+      全 repo 搜尋不到任何 <code>Merge</code>/<code>PullRequest</code> 相關程式碼,唯一動作是
+      <code>git push</code>。本質是多個分頁各自跟你聊,合併/PR 全部人工——不減少對話量。</td>
+  </tr>
+
+  <tr>
+    <td><code>BloopAI/vibe-kanban</code></td>
+    <td class="stars">28k ⭐</td>
+    <td>worktree 隔離 + 看板管理多任務,已正式 sunsetting</td>
+    <td>README 開頭已寫明停止開發。<code>worktree-manager</code> 搜尋不到任何 merge/conflict
+      相關函式——模式是隔離執行 + 產生 PR,交給人在 GitHub 走正常 review,不自動合併。
+      星數最高但已死,且沒有值得借的合併邏輯。</td>
+  </tr>
+
+  <tr>
+    <td><code>langchain-ai/langgraph-supervisor-py</code></td>
+    <td class="stars">1.6k ⭐</td>
+    <td>官方小套件,supervisor 節點分派給多個 sub-agent</td>
+    <td>建立在 <code>MessagesState</code> 之上,agent 之間靠工具呼叫互相 handoff——是
+      「一群會話式 agent 互相交班」的典範,跟我們用 <code>Send</code> 對結構化資料
+      (<code>{id, touches}</code>)做平行分派的模式不合,硬套要多繞一層。程式碼量小
+      (469 行),可以當寫路由邏輯的參考,但不建議真的 <code>pip install</code> 依賴它。</td>
+  </tr>
+
+  <tr>
+    <td><code>langchain-ai/langgraph-swarm-py</code></td>
+    <td class="stars">1.6k ⭐</td>
+    <td>官方小套件,去中心化 agent 互相交接控制權</td>
+    <td>同上——<code>SwarmState</code> 繼承 <code>MessagesState</code>,一樣是對話式典範,
+      跟我們的結構化資料平行分派模式不合。程式碼量小(289 行),同樣只當參考,不當依賴。</td>
+  </tr>
+
+  <tr>
+    <td><code>github/spec-kit</code></td>
+    <td class="stars">134k ⭐</td>
+    <td>GitHub 官方 spec-driven 開發工具</td>
+    <td><code>clarify.md</code> 指令明確是一套結構化的多輪 Q&amp;A 流程(掃五大類模糊點、
+      逐項發問),而且文件寫明這個澄清流程「預期要在進入 <code>/plan</code> 之前完成」——
+      這是把該問的問題系統化,不是壓縮對話,跟部門要的「少來回」方向不合。</td>
+  </tr>
+
+  <tr>
+    <td><code>bmad-code-org/BMAD-METHOD</code></td>
+    <td class="stars">52.9k ⭐</td>
+    <td>角色化(PM/Architect/Dev/QA)spec-driven 方法論</td>
+    <td>核心賣點就是「透過多輪對話讓每個角色深入挖掘需求」(<code>bmad-advanced-elicitation</code>
+      技能),比 spec-kit 更明確是為對話式釐清設計的,跟目標方向相反。</td>
+  </tr>
+
+  <tr class="partial">
+    <td><code>nimbalyst/nimbalyst</code>(原 <code>stravu/crystal</code>)</td>
+    <td class="stars">~3.1k ⭐(Crystal 時期)</td>
+    <td><b>部分採用</b>——三個 worktree 平行工具裡唯一有真正合併邏輯的一個</td>
+    <td><code>GitWorktreeService.mergeToMain()</code> 真的實作了合併前安全檢查(查 git 狀態
+      乾淨、偵測未提交檔案與 worktree 分支重疊、必要時自動 stash),但只有 UI 按鈕觸發、
+      衝突時直接回傳失敗沒有自動重試或降級序列邏輯。<b>已借用它的檢查順序到架構 A 的
+      <code>merge_wave</code></b>,但收斂/重試判斷還是我們自己補的——不是整套採用。</td>
+  </tr>
+
+</table>
+
+<p class="footnote">星數來自調查當下(2026-09-10)的快照,僅供排序參考,不代表現在的即時數字。
+一句話結論跟理由都來自實際讀過原始碼的結果,不是只看 README/行銷文案。</p>
+
+</body>
+</html>

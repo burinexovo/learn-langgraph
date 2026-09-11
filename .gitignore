@@ -10,3 +10,6 @@ __pycache__/
 .github/
 skill-usage.jsonl
 CLAUDE.md
+
+# Cloned external repos kept only for local reference
+references/
