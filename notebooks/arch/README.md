@@ -82,6 +82,60 @@ A 的做法直接呼叫 `review_gate(fake_state)` 這個 Python 函式來測試,
 加了 `review_gate` 之後,H 跟 A 在「失敗要不要麻煩人」這件事上已經站在同一個起跑點,兩者現在
 唯一的實質差異就是平不平行——這一點也更新進 `H_incremental_mvp.ipynb` 自己的比較表。
 
+## 同一輪討論再延伸:`review_gate` 拆出 `synthesize_verdict`(H、A 都改了)
+
+討論到 `align_requirements`/`code_agent` 該不該接 Claude Agent SDK 時,延伸出一個對
+`review_gate` 的質疑:它同時要看 `test_report`+`review_report` 才能決定要不要交給人,這是
+不是代表它其實需要 LLM 判斷,不能只是純 Python?
+
+答案是:**部分對**。原本 `review_gate` 用 `test_report.startswith("PASS") and
+review_report.startswith("PASS")` 判斷,在 demo 裡因為兩份報告都是乾淨的 `"PASS（示意）"`
+字串,AND 起來很機械;但實際情況這兩份報告不會這麼乾淨(例如「18/20 測試過,2 個 flaky 但跟
+這次改動無關」),要不要算過確實需要語意判斷,不是字串比對能做的。
+
+但**這不代表整個 `review_gate` 都該交給 LLM**——正確的拆法是把它分成兩個節點:
+
+1. **`synthesize_verdict`(新節點)**——只負責「這一輪算不算過」,讀 `test_agent`/
+   `review_agent` 各自獨立產出的報告(兩者仍然互不知道對方結果,維持原本反定錨設計),輸出
+   乾淨的 `verdict_passed`/`verdict_reason`。屬於前面「架構分工」討論裡的第三種節點類型
+   (LangGraph + 窄範圍 LLM+tool,不需要完整 Claude Code 工具鏈)。
+2. **`review_gate`(不變)**——仍然是純 Python,只讀 `verdict_passed` 決定要不要重派、
+   `review_rounds` 有沒有到上限。**「該不該再試、試幾次」這個政策決定不能讓 LLM 自己拿
+   主意**——讓 LLM 決定要不要放棄重試,會導致重試次數不可預期(它可能每次都覺得「再試一次
+   應該會過」),而且會讓 `review_gate` 沒辦法像現在這樣直接寫測試驗證。
+
+`A_full_custom_langgraph.ipynb`、`H_incremental_mvp.ipynb` 都已經加上 `synthesize_verdict`
+並重新執行驗證過(H 8 個節點、A 14 個節點,`errors: []`、`has_image: True`)——一開始一度以為
+A 「已經是」這個拆法,查了原始碼才發現 A 的 `review_gate` 跟 H 是一模一樣的字串 AND,兩邊
+其實共用同一個缺口,所以兩份都改,不是只改一份。
+
+## 另外查證:Claude Agent SDK 的兩個具體限制(影響 `code_agent`/`align_requirements` 落地方式)
+
+繼續往下挖 `code_agent`/`align_requirements` 怎麼接 Claude Agent SDK 時,查了官方文件確認
+兩件事(都是文件白紙黑字寫的,不是猜的):
+
+1. **CLAUDE.md/`.claude/skills/`/MCP 會自動載入,plugin 不會**——`ClaudeAgentOptions` 的
+   `setting_sources` 保持預設(或明確含 `"project"`)時,專案 CLAUDE.md、使用者全域
+   CLAUDE.md、`.claude/skills/`、`.mcp.json` 都會自動載入,行為跟互動式 CLI 一致;但
+   plugin(`.claude-plugin/` manifest,像 `references/skills` 那種安裝方式)**不會**自動
+   載入,CLI 找得到、SDK 找不到,一定要用 `plugins=[{"type": "local", "path": ...}]`
+   明確傳路徑,不然這個 node 會悄悄少一截能力而不會有任何警告。這個坑已經補進
+   `H_incremental_mvp.ipynb` 的 `code_agent` 節點說明裡。
+2. **SDK 不能沿用使用者自己的 Claude 訂閱登入,直連 Anthropic 一定要走 API key、分開
+   計費**——官方文件明講直連 Anthropic 只支援 `ANTHROPIC_API_KEY` 環境變數這條路,且
+   Agent SDK Overview 明文禁止第三方產品沿用 claude.ai 登入或其 rate limit;這條路的
+   API key 走 Anthropic API 的按 token 計費,跟 Claude Pro/Max/Team/Enterprise 訂閱是
+   兩本帳,不會互通。
+3. **但 SDK 支援走 Microsoft/Azure AI Foundry,能沿用部門既有的 Azure 額度**——設環境變數
+   `CLAUDE_CODE_USE_FOUNDRY=1` + `ANTHROPIC_FOUNDRY_RESOURCE`(或 `_BASE_URL`)+ 三選一的
+   認證(`ANTHROPIC_FOUNDRY_API_KEY`/`ANTHROPIC_FOUNDRY_AUTH_TOKEN`/預設 Entra 憑證鏈)+
+   明確指定模型版本,SDK 的 `query()` 會自動改走 Foundry,計費走 Azure 訂閱,**不需要**
+   另開 Anthropic Console API key。考慮到這個 repo 本身已經在用 Azure AI Foundry 當
+   `get_llm()` 的 backend(見 `README.md` 的 331bf15 那次提交),這條路線很可能就是實際
+   會採用的方案,成本問題等於解決大半——但要注意兩個能力落差:**tool search、web search
+   在 Azure-hosted 部署上不可用**(只有直連 Anthropic 才有),對需要探索 codebase 的
+   `code_agent` 這類節點可能有影響,正式評估前要留意。
+
 ## 建議的決策順序(不是叫你選一個,是叫你按順序看)
 
 1. **先看 `rejected_options.html`**——五分鐘讀完,確認「為什麼不是套用現成工具」這件事已經
