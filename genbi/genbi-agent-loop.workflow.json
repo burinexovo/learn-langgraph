@@ -1,0 +1,110 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "GenBI SQL Agent：建議流程",
+    "subtitle": "保留 Fast Path，以共享上下文、結果診斷與有預算的修復迴圈改善速度、準確度與空結果",
+    "animation": "none",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "main_flow",
+        "label": "主要流程",
+        "focus": ["request", "scope_gate", "load_context", "agent_sql", "validate_execute", "result_gate", "finalize"],
+        "note": "從問題進入 Agent 路徑，到驗證、執行與最後回覆。"
+      },
+      {
+        "id": "fast_path",
+        "label": "Fast Path",
+        "focus": ["scope_gate", "reuse_sql", "validate_execute", "result_gate"],
+        "note": "只有語意與資料範圍仍適用時，才直接重用已驗證 SQL。"
+      },
+      {
+        "id": "repair_loop",
+        "label": "空結果修復",
+        "focus": ["result_gate", "diagnose_empty", "repair_sql", "validate_execute", "finalize"],
+        "note": "先取得可判斷的證據，再讓同一 Agent 在共享預算內修復。"
+      }
+    ],
+    "output": "genbi/genbi-agent-loop-archify.html"
+  },
+  "lanes": [
+    { "id": "request_response", "label": "問題與回覆" },
+    { "id": "orchestration", "label": "路由與 Agent" },
+    { "id": "sql_runtime", "label": "SQL 驗證與執行" },
+    { "id": "recovery", "label": "診斷與修復", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "route_phase", "label": "判斷路徑", "fromCol": 0, "toCol": 1 },
+    { "id": "build_phase", "label": "取得 SQL", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "result_phase", "label": "執行與判讀", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "agent_context", "label": "同一份請求上下文", "lane": "orchestration", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "bounded_recovery", "label": "共享預算內的修復迴圈", "lane": "recovery", "fromCol": 3, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["request", "scope_gate", "load_context", "agent_sql", "validate_execute", "result_gate", "finalize"],
+  "semanticChecks": {
+    "allowedRoots": ["request"],
+    "allowedTerminals": ["finalize"],
+    "requiredPaths": [
+      { "from": "request", "to": "finalize" },
+      { "from": "scope_gate", "to": "reuse_sql" },
+      { "from": "diagnose_empty", "to": "validate_execute" }
+    ]
+  },
+  "nodes": [
+    { "id": "request", "lane": "request_response", "col": 0, "type": "external", "label": "問題 + profile", "sublabel": "意圖、使用者與資料範圍", "width": 148 },
+    { "id": "finalize", "lane": "request_response", "col": 5, "type": "frontend", "label": "回覆結果", "sublabel": "資料、確定無資料或無法確認", "width": 166 },
+    { "id": "scope_gate", "lane": "orchestration", "col": 1, "type": "security", "label": "Router + Scope Gate", "sublabel": "判斷既有 SQL 是否仍適用", "width": 166 },
+    { "id": "load_context", "lane": "orchestration", "col": 2, "type": "database", "label": "載入相關 context", "sublabel": "schema、指標、值域與先前嘗試", "width": 166 },
+    { "id": "agent_sql", "lane": "orchestration", "col": 3, "type": "backend", "label": "Agent 生成 SQL", "sublabel": "依相同上下文建立初版", "width": 156 },
+    { "id": "reuse_sql", "lane": "sql_runtime", "col": 2, "type": "messagebus", "label": "Fast Path", "sublabel": "重用已驗證且仍適用的 SQL", "tag": "避免 LLM 呼叫", "width": 166 },
+    { "id": "validate_execute", "lane": "sql_runtime", "col": 4, "type": "security", "label": "Guard + 執行 SQL", "sublabel": "限制、語法、權限與查詢執行", "width": 166 },
+    { "id": "result_gate", "lane": "sql_runtime", "col": 5, "type": "backend", "label": "結果判讀", "sublabel": "有資料、0 列、異常 NULL 或錯誤", "width": 166 },
+    { "id": "repair_sql", "lane": "recovery", "col": 3, "type": "backend", "label": "同一 Agent 修復", "sublabel": "沿用 context、證據與先前 SQL", "tag": "受共享預算限制", "width": 166 },
+    { "id": "diagnose_empty", "lane": "recovery", "col": 5, "type": "database", "label": "診斷空結果", "sublabel": "值域、日期、條件組合與 JOIN", "width": 166 }
+  ],
+  "edges": [
+    { "id": "request_scope", "from": "request", "to": "scope_gate", "variant": "default", "role": "main" },
+    { "id": "scope_context", "from": "scope_gate", "to": "load_context", "label": "未命中或不適用", "variant": "emphasis", "role": "main" },
+    { "id": "context_agent", "from": "load_context", "to": "agent_sql", "variant": "default", "role": "main" },
+    { "id": "agent_execute", "from": "agent_sql", "to": "validate_execute", "variant": "default", "role": "main" },
+    { "id": "scope_fast", "from": "scope_gate", "to": "reuse_sql", "label": "命中且適用", "variant": "emphasis", "role": "branch" },
+    { "id": "fast_execute", "from": "reuse_sql", "to": "validate_execute", "variant": "emphasis", "role": "branch" },
+    { "id": "execute_result", "from": "validate_execute", "to": "result_gate", "variant": "default", "role": "main" },
+    { "id": "result_final", "from": "result_gate", "to": "finalize", "label": "可回覆", "variant": "emphasis", "role": "main" },
+    { "id": "result_diagnose", "from": "result_gate", "to": "diagnose_empty", "label": "0 列或異常 NULL", "variant": "security", "role": "error" },
+    { "id": "diagnose_repair", "from": "diagnose_empty", "to": "repair_sql", "label": "有可修正證據", "variant": "security", "role": "return" },
+    { "id": "diagnose_final", "from": "diagnose_empty", "to": "finalize", "label": "確定無資料或原因不明", "variant": "dashed", "role": "branch" },
+    { "id": "repair_execute", "from": "repair_sql", "to": "validate_execute", "label": "尚有預算", "variant": "security", "role": "return" },
+    { "id": "repair_final", "from": "repair_sql", "to": "finalize", "label": "預算耗盡", "variant": "dashed", "role": "error", "fromSide": "bottom", "toSide": "right" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "速度",
+      "items": [
+        "Fast Path 省略不必要的 LLM 呼叫",
+        "以 p50 / p95 分開量測路由、LLM、SQL 與修復耗時"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "準確度",
+      "items": [
+        "context 提供可信的指標、值域、JOIN 與日期語意",
+        "Guard 同時檢查安全限制與可執行性"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "空結果",
+      "items": [
+        "0 列先診斷，不直接改寫 SQL",
+        "同一 Agent 沿用上下文，在 request 共享預算內修復"
+      ]
+    }
+  ]
+}
