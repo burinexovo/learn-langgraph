@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>genbi-core · agent_loop LangGraph 節點設計草稿</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#30363d;
+    --txt:#e6edf3; --muted:#9aa7b4; --accent:#58a6ff; --green:#3fb950;
+    --amber:#d29922; --red:#f85149; --purple:#bc8cff; --pill:#21262d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,"Segoe UI","PingFang TC","Noto Sans TC",system-ui,sans-serif;
+    line-height:1.6;}
+  header{padding:36px 24px 20px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#11161f,#0d1117);}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  h1{margin:0 0 6px;font-size:26px}
+  h2{margin:40px 0 12px;font-size:20px;border-left:4px solid var(--accent);padding-left:10px}
+  h3{margin:22px 0 8px;font-size:16px;color:var(--accent)}
+  .sub{color:var(--muted);font-size:14px}
+  code{background:var(--pill);padding:1px 6px;border-radius:5px;font-size:13px;
+    font-family:"SF Mono",Consolas,monospace;color:#ffd9a0;
+    overflow-wrap:break-word;word-break:break-word}
+  .card p, .callout, td, p{overflow-wrap:break-word;word-break:break-word}
+  .mermaid{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:16px;overflow:auto}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:var(--muted)}
+  ul{margin:6px 0 6px 0;padding-left:20px} li{margin:4px 0}
+  .muted{color:var(--muted)}
+  .callout{border-left:3px solid var(--amber);background:rgba(210,153,34,.08);
+    padding:10px 14px;border-radius:0 8px 8px 0;font-size:13.5px;margin:12px 0}
+  .callout b{color:var(--txt)}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;
+    background:var(--pill);border:1px solid var(--line);margin:0 6px 6px 0;color:var(--muted)}
+  footer{border-top:1px solid var(--line);margin-top:48px;padding:20px 0;color:var(--muted);font-size:13px}
+  footer a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>agent_loop → LangGraph 節點設計草稿</h1>
+    <div class="sub">依現有 <code>application/agent_loop/</code>(loop.py / router.py / tools.py / guard.py)
+      實際邏輯畫出的理想節點劃分——是「如果要用 LangGraph 重寫,節點該怎麼切」的設計圖,不是新邏輯。</div>
+  </div>
+</header>
+<div class="wrap">
+
+  <div class="callout">
+    <b>這張圖的定位</b>：對應 <code>docs/agent-loop-langgraph-plan.md</code> 的「並排小範圍驗證」計畫——
+    現有 <code>agent_loop/</code>（round 6 黃金評測 94%,DA 已在 Streamlit 使用）繼續是驗證基準,不動它。
+    這張圖是替 <code>src/agent_loop_lg/graph.py</code>（尚未開始寫）打的草稿,把現有手刻邏輯原封不動對應到
+    LangGraph 的 node/edge,好讓實作時邏輯不漏掉、不用重新發明。
+  </div>
+
+  <h2>整體流程圖</h2>
+  <div class="mermaid">
+flowchart TD
+    Start(["收到問題 + profile"]) --> Router{{"Router 節點<br/>decide_route()"}}
+    Router -->|"Fast Path 命中<br/>+ Scope Gate 語意確認通過"| FastExec["Fast Path 節點<br/>直接執行快取 SQL"]
+    Router -->|"Agent Path<br/>(未命中 / Gate 沒過)"| LoadCtx["load_context 節點<br/>組 system_prompt + schema_text<br/>(含低基數欄位真實值) + sql_history"]
+    LoadCtx --> LLM["agent_llm_call 節點<br/>tool-calling 一輪"]
+    LLM -->|"沒有呼叫任何工具"| EndNoTool(["結束:無SQL可執行"])
+    LLM -->|"呼叫 retrieve_examples /<br/>retrieve_instructions / preview_data"| ToolNode["ToolNode<br/>檢索/預覽工具"]
+    ToolNode -->|"工具結果回饋"| LLM
+    LLM -->|"呼叫 execute_sql"| Guard{{"guard 節點<br/>check_select_only"}}
+    Guard -->|"拒絕(非 SELECT/WITH)"| LLM
+    Guard -->|"通過"| RunSQL["execute_sql 節點<br/>attempts += 1"]
+    RunSQL --> ResultOk{{"_is_result_ok ?<br/>(含 allow_empty_result)"}}
+    ResultOk -->|"失敗,還有重試額度"| LLM
+    ResultOk -->|"失敗,額度用盡"| EndFail(["結束:失敗<br/>回傳 first_failed_sql + reason"])
+    ResultOk -->|"成功"| Checks{{"mechanized_checks 節點<br/>topic coverage / group-by null exclusion /<br/>ratio denominator / relative date window"}}
+    Checks -->|"四項檢查皆無問題"| EndSuccess(["結束:成功<br/>回傳 SQL + 結果"])
+    Checks -->|"發現問題,尚未 nudge 過"| LLM
+    Checks -->|"發現問題,已 nudge 過"| Fallback["fallback 節點<br/>回退第一次成功結果<br/>(best_success)"] --> EndSuccess
+    FastExec --> EndSuccess
+  </div>
+
+  <h2>節點 ↔ 現有程式碼對照</h2>
+  <table>
+    <tr><th>圖上節點</th><th>對應現有程式碼</th><th>備註</th></tr>
+    <tr><td>Router</td><td><code>router.py: decide_route()</code></td>
+      <td>Fast Path 候選比對 + <code>_passes_fast_path_gate()</code>(語意二次確認,fail-closed、短逾時)一起算在這個節點內</td></tr>
+    <tr><td>Fast Path</td><td><code>api/service.py</code> 呼叫既有 <code>execute_sql</code> 路徑</td>
+      <td>不經過 Agent Path 的整個 tool-calling 迴圈</td></tr>
+    <tr><td>load_context</td><td><code>loop.py: _load_system_prompt()</code></td>
+      <td>含 <code>_agent_loop_data_profile_text</code>(低基數欄位真實值,修過 CHINA/APAC 誤判)+ <code>sql_history</code></td></tr>
+    <tr><td>agent_llm_call</td><td><code>loop.py: run_agent_loop()</code> 主迴圈裡呼叫 <code>invoke_foundry_model()</code> 那一段</td>
+      <td>LangGraph 裡通常搭配 <code>bind_tools()</code>,對應 <code>_TOOL_SCHEMAS</code></td></tr>
+    <tr><td>ToolNode</td><td><code>tools.py: retrieve_examples / retrieve_instructions / preview_data</code></td>
+      <td>LangGraph 內建 <code>ToolNode</code> 模式,依 <code>dispatch</code> table 分派</td></tr>
+    <tr><td>guard</td><td><code>guard.py: check_select_only()</code></td>
+      <td>唯一防止 hallucinated 非 SELECT 語句碰到 DB 的關卡,<code>execute_sql</code>/<code>preview_data</code> 共用</td></tr>
+    <tr><td>execute_sql</td><td><code>tools.py: execute_sql()</code></td>
+      <td><code>attempts</code> 只在這裡累加——重試預算的計數口徑</td></tr>
+    <tr><td>_is_result_ok 判斷</td><td><code>loop.py: _is_result_ok()</code></td>
+      <td><code>allow_empty_result</code> 由模型呼叫時主動聲明,不是系統瞎猜「有沒有資料」</td></tr>
+    <tr><td>mechanized_checks</td><td><code>tools.py: check_topic_coverage / check_group_by_null_exclusion /<br/>check_ratio_denominator_convention / check_relative_date_window_uses_data_max</code></td>
+      <td>執行成功後的自動稽核,不是 LLM 主動呼叫的工具——發現問題就「nudge」一次,不算入重試次數</td></tr>
+    <tr><td>fallback</td><td><code>loop.py: best_success</code> 變數</td>
+      <td>Nudge 後模型沒有更好結果時,保底回退第一次就成功的答案,不能讓 nudge 反而丟失一個好答案</td></tr>
+  </table>
+
+  <h2>對照 <code>references/learn-langgraph</code> 的相關概念</h2>
+  <ul>
+    <li><b>ToolNode / bind_tools / 手刻 ReAct loop</b>(<code>05_langgraph_tools_and_agent</code>)——
+      對應圖上 agent_llm_call ↔ ToolNode 這一組來回,現有 <code>run_agent_loop()</code> 本質上就是手刻的 ReAct loop,
+      這部分改用 LangGraph 是最直接的對應。</li>
+    <li><b>條件邊、迴圈、<code>Command</code></b>(<code>04_langgraph_control_flow</code>)——
+      對應圖上所有分岔(Router 的 fast/agent、guard 的通過/拒絕、<code>_is_result_ok</code> 的成功/失敗、
+      mechanized_checks 的有無問題),現有程式碼是 <code>while</code> + <code>if/elif</code> 手刻,
+      這批邏輯改寫成 LangGraph 的 conditional edge 是這次驗證的核心。</li>
+    <li><b>Checkpointer / thread_id</b>(<code>06_langgraph_memory_checkpoint</code>)——
+      現有 <code>trace</code>(每輪 content + tool_calls,手動組 list 寫回 <code>query_log</code>)概念上可以對應到
+      checkpointer 的狀態快照,但這次不打算換掉——<code>agent_loop_trace</code> 已經驗證能用,
+      不在「並排小範圍驗證」的範圍內重新設計。</li>
+    <li><b>Multi-agent / Supervisor pattern</b>(<code>09_langgraph_multi_agent</code>)——
+      刻意不採用。現有工具集固定(檢索兩種 + 執行 SQL + 預覽),不是需要多個獨立 agent 分工的場景,
+      套 supervisor 模式只會增加不必要的複雜度。</li>
+  </ul>
+
+  <h2>刻意不畫進這張圖的東西</h2>
+  <ul>
+    <li><code>harness.py</code>、<code>memory.py</code>、<code>replay.py</code>——這些是黃金評測/多輪對話管理用的
+      外圍工具,不是 agent_loop 本身的決策節點,圖裡故意不放,避免混淆「核心邏輯」跟「測試工具」。</li>
+    <li>Streamlit 整合(<code>run_agent_loop_turn</code> 的追問/reject/knowledge 分流)——
+      那一層在 <code>agent_loop</code> 之外,這張圖只畫 <code>run_agent_loop()</code> 本體。</li>
+  </ul>
+
+</div>
+<footer>
+  <div class="wrap">
+    <span class="muted">狀態：設計草稿,尚未實作。完整計畫見</span>
+    <code>docs/agent-loop-langgraph-plan.md</code>、<code>.scratch/agent-loop/TODO.md</code> 第16項。
+  </div>
+</footer>
+<script>
+mermaid.initialize({startOnLoad:true, theme:'dark',
+themeVariables:{fontFamily:'-apple-system,"Noto Sans TC",sans-serif'}});
+</script>
+</body>
+</html>
