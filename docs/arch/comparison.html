@@ -1,7 +1,12 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>波次 vs 黑板派工</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.15.0/mermaid.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-
   :root {
     --bg: #f5f6f9;
     --surface: #ffffff;
@@ -234,6 +239,8 @@
 
   footer.page { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-faint); font-size: .8rem; }
 </style>
+</head>
+<body>
 
 <div class="wrap">
 
@@ -508,4 +515,24 @@ graph TD;
     document.getElementById('slot-a').hidden = !isA;
     document.getElementById('slot-a2').hidden = isA;
   }
+
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    securityLevel: 'loose',
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 14, nodeSpacing: 36, rankSpacing: 52 },
+    themeVariables: {
+      background: '#12151c',
+      primaryColor: '#242a35',
+      primaryTextColor: '#e4e7ee',
+      primaryBorderColor: '#8791a3',
+      lineColor: '#7b8494',
+      secondaryColor: '#23325c',
+      tertiaryColor: '#4a3416',
+      fontFamily: 'IBM Plex Sans, sans-serif',
+      edgeLabelBackground: '#1c2029'
+    }
+  });
 </script>
+</body>
+</html>
