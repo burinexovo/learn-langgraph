@@ -1,0 +1,511 @@
+<title>波次 vs 黑板派工</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #f5f6f9;
+    --surface: #ffffff;
+    --surface-2: #eef0f5;
+    --border: #dde1e9;
+    --text: #1a2233;
+    --text-muted: #5b6472;
+    --text-faint: #8b93a3;
+    --accent-a: #3457d5;
+    --accent-a-soft: #e8ecfc;
+    --accent-a2: #b8600a;
+    --accent-a2-soft: #fbead9;
+    --good: #1f8a5f;
+    --good-soft: #e4f5ed;
+    --bad: #b23b3b;
+    --bad-soft: #fbe9e9;
+    --shadow: 0 1px 2px rgba(26,34,51,.04), 0 8px 24px -12px rgba(26,34,51,.12);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161c;
+      --surface: #1c1f27;
+      --surface-2: #20242e;
+      --border: #2c313d;
+      --text: #e7e9ee;
+      --text-muted: #a4abb9;
+      --text-faint: #6d7484;
+      --accent-a: #7d95f2;
+      --accent-a-soft: #23294a;
+      --accent-a2: #e0954c;
+      --accent-a2-soft: #3a2a16;
+      --good: #4fbf8c;
+      --good-soft: #16302564;
+      --bad: #e07575;
+      --bad-soft: #3a1f1f;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161c;
+    --surface: #1c1f27;
+    --surface-2: #20242e;
+    --border: #2c313d;
+    --text: #e7e9ee;
+    --text-muted: #a4abb9;
+    --text-faint: #6d7484;
+    --accent-a: #7d95f2;
+    --accent-a-soft: #23294a;
+    --accent-a2: #e0954c;
+    --accent-a2-soft: #3a2a16;
+    --good: #4fbf8c;
+    --good-soft: #163025;
+    --bad: #e07575;
+    --bad-soft: #3a1f1f;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -14px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    padding: 0 20px;
+    padding-block: 40px 80px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; text-wrap: balance; margin: 0; }
+  code, .mono, .tag, table { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+  header.page { margin-bottom: 48px; }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: .72rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 10px;
+  }
+  h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 700; line-height: 1.15; }
+  .lede {
+    margin-top: 14px;
+    max-width: 62ch;
+    color: var(--text-muted);
+    font-size: 1.02rem;
+    line-height: 1.65;
+  }
+
+  section { margin-top: 56px; }
+  section > h2 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .section-note {
+    color: var(--text-muted);
+    font-size: .92rem;
+    max-width: 68ch;
+    line-height: 1.6;
+    margin-bottom: 22px;
+  }
+
+  /* ---- arch header chips ---- */
+  .arch-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .arch-chip::before { content: ''; width: 8px; height: 8px; border-radius: 50%; }
+  .arch-chip.a { background: var(--accent-a-soft); color: var(--accent-a); }
+  .arch-chip.a::before { background: var(--accent-a); }
+  .arch-chip.a2 { background: var(--accent-a2-soft); color: var(--accent-a2); }
+  .arch-chip.a2::before { background: var(--accent-a2); }
+
+  /* ---- diagram viewer ---- */
+  .diagram-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .diagram-tab {
+    flex: 1;
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text);
+  }
+  .diagram-tab .name { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: .95rem; display: block; }
+  .diagram-tab .desc { color: var(--text-muted); font-size: .82rem; margin-top: 3px; display: block; }
+  .diagram-tab[data-active="true"] { border-color: var(--tab-accent, var(--accent-a)); background: var(--tab-accent-soft, var(--accent-a-soft)); }
+  .diagram-tab[data-active="true"] .name { color: var(--tab-accent, var(--accent-a)); }
+  .diagram-tab#tab-a[data-active="true"] { --tab-accent: var(--accent-a); --tab-accent-soft: var(--accent-a-soft); }
+  .diagram-tab#tab-a2[data-active="true"] { --tab-accent: var(--accent-a2); --tab-accent-soft: var(--accent-a2-soft); }
+
+  .diagram-frame-wrap {
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: #12151c;
+    box-shadow: var(--shadow);
+    padding: 32px 24px;
+    overflow-x: auto;
+  }
+  .diagram-slot[hidden] { display: none; }
+  .diagram-frame-wrap .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .diagram-frame-wrap svg { max-width: 100%; height: auto !important; }
+
+  /* ---- stat row ---- */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .stat {
+    background: var(--surface);
+    padding: 16px 18px;
+  }
+  .stat .label { font-size: .74rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
+  .stat .value { font-family: 'IBM Plex Mono', monospace; font-size: 1.5rem; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat .value .unit { font-size: .85rem; color: var(--text-muted); font-weight: 500; margin-left: 3px; }
+  .stat.a .value { color: var(--accent-a); }
+  .stat.a2 .value { color: var(--accent-a2); }
+
+  /* ---- pros/cons ---- */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 640px) { .compare-grid { grid-template-columns: 1fr; } }
+  .arch-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .arch-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .plist { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+  .plist li { display: flex; gap: 9px; font-size: .89rem; line-height: 1.55; }
+  .plist .mark { flex: none; width: 1.1em; font-weight: 700; }
+  .plist.good .mark { color: var(--good); }
+  .plist.bad .mark { color: var(--bad); }
+  .sub-h { font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-faint); margin: 14px 0 8px; }
+
+  /* ---- mechanism callouts ---- */
+  .callout {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--callout-color, var(--text-faint));
+    background: var(--surface);
+    border-radius: 0 12px 12px 0;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .callout h4 { margin: 0 0 8px; font-size: .95rem; font-weight: 600; font-family: 'IBM Plex Sans', sans-serif; }
+  .callout p { margin: 0 0 8px; font-size: .89rem; line-height: 1.65; color: var(--text-muted); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.verified { --callout-color: var(--good); }
+  .callout.caveat { --callout-color: var(--bad); }
+  .verdict-pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; margin-right: 8px; }
+  .verdict-pill.pass { background: var(--good-soft); color: var(--good); }
+  .verdict-pill.gap { background: var(--bad-soft); color: var(--bad); }
+
+  /* ---- completion ---- */
+  .layer-row { display: flex; gap: 14px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--border); }
+  .layer-row:first-of-type { border-top: none; }
+  .layer-badge { flex: none; width: 84px; font-family: 'IBM Plex Mono', monospace; font-size: .72rem; font-weight: 600; padding: 4px 0; text-align: center; border-radius: 6px; margin-top: 2px; }
+  .layer-badge.high { background: var(--good-soft); color: var(--good); }
+  .layer-badge.mid { background: var(--accent-a-soft); color: var(--accent-a); }
+  .layer-badge.low { background: var(--bad-soft); color: var(--bad); }
+  .layer-body h4 { margin: 0 0 4px; font-size: .95rem; }
+  .layer-body p { margin: 0; font-size: .87rem; color: var(--text-muted); line-height: 1.6; }
+
+  footer.page { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-faint); font-size: .8rem; }
+</style>
+
+<div class="wrap">
+
+  <header class="page">
+    <div class="eyebrow">LangGraph 開發工作流 · 架構草案比較</div>
+    <h1>同一套節點分工，兩種派工方式</h1>
+    <p class="lede">
+      架構 A 用固定的「波次（wave）」分派平行工作；架構 A2 從 A 分支出去，改成
+      「黑板（blackboard）」動態認領。節點怎麼分工（哪些要問 LLM、哪些純 Python）
+      兩邊完全一樣，差別只在<strong>怎麼把工作分給平行的 worker</strong>。
+      下面先看兩張真的組出來、真的跑過的圖，再看差異整理。
+    </p>
+  </header>
+
+  <section id="diagrams">
+    <h2>圖</h2>
+    <p class="section-note">
+      每個節點的顏色代表「該用哪種實作」：藍色是完整 Claude Code SDK/CLI，
+      橘色是窄範圍 LLM + tool，灰色是純 Python（不問 LLM），紫色是唯一需要人的地方
+      （human_checkpoint）。虛線箭頭是重試/例外路徑，不是主流程。
+    </p>
+
+    <div class="diagram-tabs">
+      <button class="diagram-tab" id="tab-a" data-active="true" onclick="showDiagram('a')">
+        <span class="name">A · 波次派工</span>
+        <span class="desc">14 節點 · 固定 wave，同波不重疊才平行</span>
+      </button>
+      <button class="diagram-tab" id="tab-a2" data-active="false" onclick="showDiagram('a2')">
+        <span class="name">A2 · 黑板派工</span>
+        <span class="desc">12 節點 · worker 動態認領不衝突的任務</span>
+      </button>
+    </div>
+
+    <div class="diagram-frame-wrap">
+      <div class="diagram-slot" id="slot-a">
+      <pre class="mermaid">
+graph TD;
+	__start__(["__start__"]):::startend
+	__start__ --> align_requirements;
+	align_requirements --> plan_slices;
+	plan_slices --> plan_waves;
+	plan_waves --> dispatch_wave;
+	dispatch_wave -->|"Send() 分派整波"| code_agent;
+	code_agent --> merge_wave;
+	merge_wave -.->|"有衝突"| resolve_conflict;
+	merge_wave -->|"沒衝突"| advance_or_finish;
+	resolve_conflict -.->|"重派同一波"| dispatch_wave;
+	advance_or_finish -.->|"還有下一波"| dispatch_wave;
+	advance_or_finish -->|"沒有下一波了"| test_agent;
+	advance_or_finish --> review_agent;
+	test_agent --> synthesize_verdict;
+	review_agent --> synthesize_verdict;
+	synthesize_verdict --> review_gate;
+	review_gate -.->|"沒過，重派整波"| dispatch_wave;
+	review_gate -->|"過了 / 連兩輪失敗"| human_checkpoint;
+	human_checkpoint -.->|"駁回"| align_requirements;
+	human_checkpoint -->|"核准"| push_or_mr;
+	__end__(["__end__"]):::startend
+	push_or_mr --> __end__;
+	align_requirements["align_requirements\n對齊需求，讀上一輪回饋"]
+	code_agent["code_agent\n每個 slice 一次 CLI 呼叫"]
+	plan_slices["plan_slices\n拆成多個 OpenSpec change"]
+	test_agent["test_agent\nPASS/FAIL（示意）"]
+	review_agent["review_agent\nPASS/FAIL（示意）"]
+	synthesize_verdict["synthesize_verdict\n綜合判斷這輪過不過"]
+	plan_waves["plan_waves\n依 touches 交集分波"]
+	dispatch_wave["dispatch_wave\nSend 分派整波"]
+	merge_wave["merge_wave\n合併這一波的分支"]
+	resolve_conflict["resolve_conflict\n衝突就重派同一波"]
+	advance_or_finish["advance_or_finish\n還有下一波嗎？"]
+	review_gate["review_gate\n沒過重派，過了才給人看"]
+	push_or_mr["push_or_mr\n核准後推送 / 開 MR"]
+	human_checkpoint["human_checkpoint\n人核准或打回去"]
+
+	classDef startend fill:transparent,stroke:#7b8494,stroke-width:1.5px,stroke-dasharray:3 3,color:#9aa2b1
+	classDef fullAgent fill:#23325c,stroke:#7d95f2,stroke-width:1.5px,color:#e4e9ff
+	classDef narrowLlm fill:#4a3416,stroke:#e0954c,stroke-width:1.5px,color:#ffe9cf
+	classDef control fill:#242a35,stroke:#8791a3,stroke-width:1.5px,color:#e4e7ee
+	classDef human fill:#33234f,stroke:#b28aef,stroke-width:1.5px,color:#f1e6ff
+	class align_requirements,code_agent fullAgent
+	class plan_slices,test_agent,review_agent,synthesize_verdict narrowLlm
+	class plan_waves,dispatch_wave,merge_wave,resolve_conflict,advance_or_finish,review_gate,push_or_mr control
+	class human_checkpoint human
+      </pre>
+      </div>
+      <div class="diagram-slot" id="slot-a2" hidden>
+      <pre class="mermaid">
+graph TD;
+	__start__(["__start__"]):::startend
+	__start__ --> align_requirements;
+	align_requirements --> plan_slices;
+	plan_slices --> post_to_blackboard;
+	post_to_blackboard --> blackboard_dispatch;
+	blackboard_dispatch -->|"全部 slice 都 done"| merge_all;
+	merge_all -.->|"有衝突"| resolve_conflict;
+	merge_all -->|"沒衝突"| test_agent;
+	merge_all --> review_agent;
+	resolve_conflict -.->|"重設回 unclaimed"| blackboard_dispatch;
+	test_agent --> synthesize_verdict;
+	review_agent --> synthesize_verdict;
+	synthesize_verdict --> review_gate;
+	review_gate -.->|"沒過，重新鋪回黑板"| post_to_blackboard;
+	review_gate -->|"過了 / 連兩輪失敗"| human_checkpoint;
+	human_checkpoint -.->|"駁回"| align_requirements;
+	human_checkpoint -->|"核准"| push_or_mr;
+	__end__(["__end__"]):::startend
+	push_or_mr --> __end__;
+	align_requirements["align_requirements\n對齊需求，讀上一輪回饋"]
+	plan_slices["plan_slices\n拆成多個 OpenSpec change"]
+	review_agent["review_agent\nPASS/FAIL（示意）"]
+	test_agent["test_agent\nPASS/FAIL（示意）"]
+	synthesize_verdict["synthesize_verdict\n綜合判斷這輪過不過"]
+	post_to_blackboard["post_to_blackboard\n全部 slice 寫成 unclaimed"]
+	blackboard_dispatch["blackboard_dispatch\nN 個 worker 動態認領"]
+	merge_all["merge_all\n全部 slice 做完才合併"]
+	resolve_conflict["resolve_conflict\n衝突的 slice 重設回 unclaimed"]
+	review_gate["review_gate\n沒過重派，過了才給人看"]
+	push_or_mr["push_or_mr\n核准後推送 / 開 MR"]
+	human_checkpoint["human_checkpoint\n人核准或打回去"]
+
+	classDef startend fill:transparent,stroke:#7b8494,stroke-width:1.5px,stroke-dasharray:3 3,color:#9aa2b1
+	classDef fullAgent fill:#23325c,stroke:#7d95f2,stroke-width:1.5px,color:#e4e9ff
+	classDef narrowLlm fill:#4a3416,stroke:#e0954c,stroke-width:1.5px,color:#ffe9cf
+	classDef control fill:#242a35,stroke:#8791a3,stroke-width:1.5px,color:#e4e7ee
+	classDef human fill:#33234f,stroke:#b28aef,stroke-width:1.5px,color:#f1e6ff
+	class align_requirements fullAgent
+	class plan_slices,test_agent,review_agent,synthesize_verdict narrowLlm
+	class post_to_blackboard,blackboard_dispatch,merge_all,resolve_conflict,review_gate,push_or_mr control
+	class human_checkpoint human
+      </pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="stats">
+    <h2>基本數字</h2>
+    <p class="section-note">
+      節點/邊數是圖本身的複雜度；輪數是同一組 4 個 slice（其中一個刻意設得很久）
+      在兩種派工方式下真的跑過、記錄下來的完成輪數，不是估的。
+    </p>
+    <div class="stat-row">
+      <div class="stat a"><div class="label">A 節點數</div><div class="value">14</div></div>
+      <div class="stat a"><div class="label">A 邊數</div><div class="value">18</div></div>
+      <div class="stat a"><div class="label">A 完成輪數（示例）</div><div class="value">6<span class="unit">輪</span></div></div>
+      <div class="stat a2"><div class="label">A2 節點數</div><div class="value">12</div></div>
+      <div class="stat a2"><div class="label">A2 邊數</div><div class="value">15</div></div>
+      <div class="stat a2"><div class="label">A2 完成輪數（示例）</div><div class="value">5<span class="unit">輪</span></div></div>
+    </div>
+  </section>
+
+  <section id="tradeoffs">
+    <h2>優缺點各三點</h2>
+    <p class="section-note">
+      不是「A2 全面升級」——是不同的取捨：A2 換來的利用率，代價是可重播性跟除錯難度。
+    </p>
+    <div class="compare-grid">
+      <div class="arch-card">
+        <h3><span class="arch-chip a">A · 波次</span></h3>
+        <div class="sub-h">優勢</div>
+        <ul class="plist good">
+          <li><span class="mark">+</span>決定性、可重播：同一份輸入重跑，波次分法固定，好除錯</li>
+          <li><span class="mark">+</span>平行是 LangGraph 自己用 Send 管的分支，不用自己刻搶任務邏輯</li>
+          <li><span class="mark">+</span>查靜態的 wave 計畫就知道發生了什麼事</li>
+        </ul>
+        <div class="sub-h">代價</div>
+        <ul class="plist bad">
+          <li><span class="mark">−</span>任務時間差很大時，一個長任務會卡住整波，其他人閒置</li>
+          <li><span class="mark">−</span>波與波之間依序跑，下一波不衝突的任務也得等這一波全部做完</li>
+          <li><span class="mark">−</span>沒有真正的動態調度，資源利用率較低</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <h3><span class="arch-chip a2">A2 · 黑板</span></h3>
+        <div class="sub-h">優勢</div>
+        <ul class="plist good">
+          <li><span class="mark">+</span>動態認領，誰先做完誰接下一個——示例中 5 輪 vs 6 輪</li>
+          <li><span class="mark">+</span>更貼近真實部署：worker 本來就是外部各自獨立的 process</li>
+          <li><span class="mark">+</span>衝突處理更精細，只重設真的衝突的 slice，不用整批重派</li>
+        </ul>
+        <div class="sub-h">代價</div>
+        <ul class="plist bad">
+          <li><span class="mark">−</span>需要真正支援原子操作的後端（Postgres row lock / Redis SETNX）</li>
+          <li><span class="mark">−</span>除錯較難：要查即時的黑板狀態，不是一張固定的圖</li>
+          <li><span class="mark">−</span>認領順序可能因時間差而不同，較難重播</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="mechanisms">
+    <h2>中途卡住問問題</h2>
+    <p class="section-note">
+      這是這輪討論的重點機制：code_agent 遇到自己不能決定的事，要能跳出去問人，
+      而且不能擋住同一波其他還在跑的 slice。
+    </p>
+
+    <div class="callout verified">
+      <h4><span class="verdict-pill pass">A · 真的測過</span>整張真實圖驗證通過</h4>
+      <p>
+        不是只在獨立的小圖測——直接用正式的 <code>DevWorkflowState</code>／<code>merge_wave</code>／
+        <code>advance_or_finish</code>／<code>human_checkpoint</code> 整條路徑跑一次：三個平行 slice
+        裡一個卡住問問題，另外兩個照樣跑完，答完之後正確接回 <code>merge_wave</code>，
+        同波的其他 slice 完全沒被拖累。
+      </p>
+    </div>
+
+    <div class="callout caveat">
+      <h4><span class="verdict-pill gap">A2 · 誠實的限制</span>這份 sketch 沒辦法示範同一件事</h4>
+      <p>
+        機制在真實部署下一樣成立（甚至更自然，因為 A2 的 worker 本來就是外部獨立
+        process）。但 <code>blackboard_dispatch</code> 是單一 process 內的同步 Python
+        迴圈在模擬多個 worker，不是真的平行分支——在裡面呼叫 <code>interrupt()</code>
+        會凍結整個節點，連帶卡住所有還在跑的 worker，不是只卡住問問題的那一個。
+      </p>
+    </div>
+
+    <div class="callout caveat">
+      <h4><span class="verdict-pill gap">兩邊共同的已知限制</span><code>code_changes</code> 是整串累加，不是單輪</h4>
+      <p>
+        review 沒過重派時，兩邊都不會重新跑 <code>plan_slices</code> 清空這個欄位——
+        因為它用 <code>operator.add</code> 當 reducer，所以是整個對話串累加，不是「這一輪」
+        的結果。這是故意留白沒修的地方，寫在這裡是為了不讓它悄悄消失。
+      </p>
+    </div>
+  </section>
+
+  <section id="status">
+    <h2>現在的完成度</h2>
+    <p class="section-note">三層完成度不一樣，不能用單一百分比帶過。</p>
+
+    <div class="layer-row">
+      <div class="layer-badge high">已驗證</div>
+      <div class="layer-body">
+        <h4>CLI subprocess 機制（labs/）</h4>
+        <p>不設 API key 靠既有登入跑 CLI、跨 process session resume、
+        <code>--json-schema</code> 強制 <code>needs_clarification</code> 欄位、多個平行 interrupt
+        互不干擾——全部真的執行測過，不是紙上推演。</p>
+      </div>
+    </div>
+    <div class="layer-row">
+      <div class="layer-badge mid">已定案</div>
+      <div class="layer-body">
+        <h4>圖的形狀（A / A2 本身）</h4>
+        <p>節點、邊、synthesize_verdict／review_gate 的分工、迴圈怎麼繞——主流程真的跑得通，
+        notebook 裡的斷言全部通過。</p>
+      </div>
+    </div>
+    <div class="layer-row">
+      <div class="layer-badge low">還沒做</div>
+      <div class="layer-body">
+        <h4>失敗路徑、真正接上 Claude Code</h4>
+        <p>每個 agent 節點目前都是回傳假字串的 Python stub，重試／衝突分支從沒真的執行過
+        （因為 stub 永遠回 PASS）。這是刻意的——sketch 定完形狀，接線是下一步。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="page">
+    對應 notebooks/arch/A_full_custom_langgraph.ipynb 與 notebooks/arch/A2_blackboard_dispatch.ipynb。
+    圖是從 LangGraph 真正組出來的 graph 直接匯出 mermaid 原始碼（<code>get_graph().draw_mermaid()</code>），
+    再依節點分工上色──不是手畫的，拓樸跟 notebook 裡 <code>show_graph()</code> 那張是同一份資料。
+    圖檔在 <code>docs/arch/A_workflow.html</code> / <code>A2_workflow.html</code>，這頁是手寫的比較彙整。
+  </footer>
+
+</div>
+
+<script>
+  function showDiagram(which) {
+    const isA = which === 'a';
+    document.getElementById('tab-a').dataset.active = String(isA);
+    document.getElementById('tab-a2').dataset.active = String(!isA);
+    document.getElementById('slot-a').hidden = !isA;
+    document.getElementById('slot-a2').hidden = isA;
+  }
+</script>

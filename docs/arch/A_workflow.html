@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>架構 A：波次派工</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.15.0/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f6f9; --surface: #ffffff; --border: #dde1e9;
+    --text: #1a2233; --text-muted: #5b6472; --text-faint: #8b93a3;
+    --panel-bg: #12151c; --panel-border: #262b36;
+    --shadow: 0 1px 2px rgba(26,34,51,.04), 0 8px 24px -12px rgba(26,34,51,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161c; --surface: #1c1f27; --border: #2c313d;
+      --text: #e7e9ee; --text-muted: #a4abb9; --text-faint: #6d7484;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161c; --surface: #1c1f27; --border: #2c313d;
+    --text: #e7e9ee; --text-muted: #a4abb9; --text-faint: #6d7484;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -14px rgba(0,0,0,.6);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 0 20px; padding-block: 36px 60px;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-family: 'Fraunces', Georgia, serif; font-size: clamp(1.5rem, 3.6vw, 2rem); font-weight: 700; margin: 0; text-wrap: balance; }
+  .lede { color: var(--text-muted); max-width: 66ch; margin-top: 10px; line-height: 1.6; font-size: .98rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 20px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-family: 'IBM Plex Mono', monospace; font-size: .8rem; color: var(--text-muted); }
+  .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; border: 1.5px solid; }
+  .dot-full { background: #23325c; border-color: #7d95f2; }
+  .dot-narrow { background: #4a3416; border-color: #e0954c; }
+  .dot-control { background: #242a35; border-color: #8791a3; }
+  .dot-human { background: #33234f; border-color: #b28aef; }
+
+  .diagram-panel {
+    margin-top: 26px; background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 16px; box-shadow: var(--shadow); padding: 28px 22px;
+    overflow-x: auto;
+  }
+  .diagram-panel .mermaid { display: flex; justify-content: center; }
+  .diagram-panel svg { max-width: 100%; height: auto !important; }
+  .sub { font-size: 11.5px; opacity: .82; font-weight: 400; }
+  .tagline { font-size: 10.5px; opacity: .72; font-style: italic; }
+
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 26px; }
+  @media (max-width: 640px) { .notes { grid-template-columns: 1fr; } }
+  .note-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .note-card h3 { margin: 0 0 12px; font-size: .95rem; font-weight: 600; font-family: 'IBM Plex Sans', sans-serif; }
+  .note-card ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+  .note-card li { font-size: .86rem; line-height: 1.55; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>架構 A：波次派工</h1>
+    <p class="lede">固定波次（wave）分派平行工作，同波不重疊才平行，波與波之間依序跑。</p>
+    <div class="legend">
+        <div class="legend-item"><span class="dot dot-full"></span>完整 Claude Code SDK/CLI</div>
+        <div class="legend-item"><span class="dot dot-narrow"></span>窄範圍 LLM + tool</div>
+        <div class="legend-item"><span class="dot dot-control"></span>純 Python（不問 LLM）</div>
+        <div class="legend-item"><span class="dot dot-human"></span>人工</div>
+    </div>
+  </header>
+
+  <div class="diagram-panel">
+    <pre class="mermaid">
+graph TD;
+	__start__(["__start__"]):::startend
+	__start__ --> align_requirements;
+	align_requirements --> plan_slices;
+	plan_slices --> plan_waves;
+	plan_waves --> dispatch_wave;
+	dispatch_wave -->|"Send() 分派整波"| code_agent;
+	code_agent --> merge_wave;
+	merge_wave -.->|"有衝突"| resolve_conflict;
+	merge_wave -->|"沒衝突"| advance_or_finish;
+	resolve_conflict -.->|"重派同一波"| dispatch_wave;
+	advance_or_finish -.->|"還有下一波"| dispatch_wave;
+	advance_or_finish -->|"沒有下一波了"| test_agent;
+	advance_or_finish --> review_agent;
+	test_agent --> synthesize_verdict;
+	review_agent --> synthesize_verdict;
+	synthesize_verdict --> review_gate;
+	review_gate -.->|"沒過，重派整波"| dispatch_wave;
+	review_gate -->|"過了 / 連兩輪失敗"| human_checkpoint;
+	human_checkpoint -.->|"駁回"| align_requirements;
+	human_checkpoint -->|"核准"| push_or_mr;
+	__end__(["__end__"]):::startend
+	push_or_mr --> __end__;
+	align_requirements["<b>align_requirements</b><br/><span class='sub'>對齊需求，讀上一輪回饋</span>"]
+	code_agent["<b>code_agent</b><br/><span class='sub'>每個 slice 一次 CLI 呼叫</span><br/><span class='tagline'>Send() 平行分支</span>"]
+	plan_slices["<b>plan_slices</b><br/><span class='sub'>拆成多個 OpenSpec change</span>"]
+	test_agent["<b>test_agent</b><br/><span class='sub'>PASS/FAIL（示意）</span>"]
+	review_agent["<b>review_agent</b><br/><span class='sub'>PASS/FAIL（示意）</span>"]
+	synthesize_verdict["<b>synthesize_verdict</b><br/><span class='sub'>綜合判斷這輪過不過</span>"]
+	plan_waves["<b>plan_waves</b><br/><span class='sub'>依 touches 交集分波</span>"]
+	dispatch_wave["<b>dispatch_wave</b><br/><span class='sub'>Send 分派整波</span>"]
+	merge_wave["<b>merge_wave</b><br/><span class='sub'>合併這一波的分支</span>"]
+	resolve_conflict["<b>resolve_conflict</b><br/><span class='sub'>衝突就重派同一波</span>"]
+	advance_or_finish["<b>advance_or_finish</b><br/><span class='sub'>還有下一波嗎？</span>"]
+	review_gate["<b>review_gate</b><br/><span class='sub'>沒過重派，過了才給人看</span>"]
+	push_or_mr["<b>push_or_mr</b><br/><span class='sub'>核准後推送 / 開 MR</span>"]
+	human_checkpoint["<b>human_checkpoint</b><br/><span class='sub'>人核准或打回去</span>"]
+
+	classDef startend fill:transparent,stroke:#7b8494,stroke-width:1.5px,stroke-dasharray:3 3,color:#9aa2b1,font-family:'IBM Plex Mono',monospace,font-size:12px
+	classDef fullAgent fill:#23325c,stroke:#7d95f2,stroke-width:1.5px,color:#e4e9ff,font-family:'IBM Plex Sans',sans-serif
+	classDef narrowLlm fill:#4a3416,stroke:#e0954c,stroke-width:1.5px,color:#ffe9cf,font-family:'IBM Plex Sans',sans-serif
+	classDef control fill:#242a35,stroke:#8791a3,stroke-width:1.5px,color:#e4e7ee,font-family:'IBM Plex Sans',sans-serif
+	classDef human fill:#33234f,stroke:#b28aef,stroke-width:1.5px,color:#f1e6ff,font-family:'IBM Plex Sans',sans-serif
+	class align_requirements,code_agent fullAgent
+	class plan_slices,test_agent,review_agent,synthesize_verdict narrowLlm
+	class plan_waves,dispatch_wave,merge_wave,resolve_conflict,advance_or_finish,review_gate,push_or_mr control
+	class human_checkpoint human
+    </pre>
+  </div>
+
+  <div class="notes">
+        <div class="note-card">
+          <h3>節點分工（顏色 = 該用哪種實作）</h3>
+          <ul>
+          <li>完整 Claude Code SDK/CLI（align_requirements, code_agent）</li>
+          <li>窄範圍 LLM + tool（plan_slices, test_agent, review_agent, synthesize_verdict）</li>
+          <li>純 Python，不問 LLM（分派、合併、把關）</li>
+          <li>人工（human_checkpoint，唯一需要人的地方）</li>
+          </ul>
+        </div>
+        <div class="note-card">
+          <h3>跟 A2（blackboard 版）的關鍵差異</h3>
+          <ul>
+          <li>用固定波次（wave）分派：同波不重疊才平行，波與波之間依序跑</li>
+          <li>code_agent 是 LangGraph 自己用 Send 管理的平行分支，不是外部獨立 process</li>
+          </ul>
+        </div>
+  </div>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    securityLevel: 'loose',
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 14, nodeSpacing: 36, rankSpacing: 52 },
+    themeVariables: {
+      background: '#12151c',
+      primaryColor: '#242a35',
+      primaryTextColor: '#e4e7ee',
+      primaryBorderColor: '#8791a3',
+      lineColor: '#7b8494',
+      secondaryColor: '#23325c',
+      tertiaryColor: '#4a3416',
+      fontFamily: 'IBM Plex Sans, sans-serif',
+      edgeLabelBackground: '#1c2029'
+    }
+  });
+</script>
+</body>
+</html>
