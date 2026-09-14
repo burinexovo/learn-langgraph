@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude CLI × LangGraph 實驗紀錄</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #12161f;
+    --panel-2: #171c28;
+    --border: #232a3b;
+    --text: #dde3ee;
+    --muted: #7c8494;
+    --faint: #4d5566;
+    --pass: #4fd699;
+    --open: #e8a33d;
+    --key: #6ea8fe;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', 'Segoe UI', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 0 20px;
+    padding-block: 48px 80px;
+    line-height: 1.75;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  /* terminal window chrome */
+  .term {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px -32px rgba(0,0,0,.7);
+  }
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .term-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .term-dot:nth-child(1) { background: #4a4f5e; }
+  .term-dot:nth-child(2) { background: #4a4f5e; }
+  .term-dot:nth-child(3) { background: #4a4f5e; }
+  .term-title {
+    margin-left: 6px;
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--muted);
+    letter-spacing: .02em;
+  }
+  .term-body { padding: 40px 44px 8px; }
+
+  h1 {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: clamp(1.35rem, 3.4vw, 1.85rem);
+    line-height: 1.35;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h1 .prompt { color: var(--pass); }
+  h1 .cursor {
+    display: inline-block;
+    width: .5em;
+    background: var(--text);
+    margin-left: 2px;
+    animation: blink 1.1s step-end infinite;
+  }
+  @media (prefers-reduced-motion: reduce) { h1 .cursor { animation: none; opacity: .6; } }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .lede {
+    color: var(--muted);
+    max-width: 56ch;
+    margin-top: 14px;
+    font-size: .98rem;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--faint);
+  }
+  .meta strong { color: var(--muted); font-weight: 500; }
+
+  section { padding: 34px 44px; border-top: 1px solid var(--border); }
+  section > h2 {
+    font-family: var(--mono);
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  section > p { margin: 0 0 12px; font-size: .95rem; }
+  section > p:last-child { margin-bottom: 0; }
+  section > p code, li code {
+    font-family: var(--mono);
+    font-size: .88em;
+    color: var(--key);
+    background: rgba(110,168,254,.1);
+    padding: .1em .35em;
+    border-radius: 4px;
+  }
+
+  /* test blocks */
+  .test { padding: 30px 44px; border-top: 1px solid var(--border); }
+  .test-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .test-head h3 {
+    font-family: var(--mono);
+    font-size: .92rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+  }
+  .test-head h3 span { color: var(--faint); font-weight: 500; }
+  .badge {
+    font-family: var(--mono);
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    color: var(--pass);
+    border: 1px solid rgba(79,214,153,.35);
+    background: rgba(79,214,153,.08);
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  pre.cmd {
+    font-family: var(--mono);
+    font-size: .82rem;
+    line-height: 1.7;
+    background: #080a10;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  pre.cmd .p { color: var(--pass); }
+  pre.cmd .c { color: var(--muted); }
+  pre.cmd .o { color: var(--key); }
+
+  .test p.concl { margin: 0; font-size: .95rem; }
+  .test p.concl strong { color: var(--text); }
+
+  /* deploy compare cards */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    background: var(--panel-2);
+  }
+  .card .tag {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--pass);
+    display: block;
+    margin-bottom: 8px;
+  }
+  .card.warn .tag { color: var(--open); }
+  .card p { margin: 0; font-size: .87rem; color: var(--muted); }
+
+  /* round log */
+  .round { margin-top: 14px; }
+  .round-label {
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--faint);
+    margin-bottom: 6px;
+    letter-spacing: .04em;
+  }
+  .round p {
+    margin: 0 0 4px;
+    font-size: .88rem;
+    color: var(--muted);
+    padding-left: 14px;
+    border-left: 2px solid var(--border);
+  }
+  .round p.echo { color: var(--text); border-left-color: var(--key); }
+
+  /* summary */
+  .summary {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--mono);
+    margin-bottom: 18px;
+  }
+  .summary .big { font-size: 2rem; font-weight: 700; color: var(--pass); }
+  .summary .label { font-size: .82rem; color: var(--muted); }
+
+  ul.open { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  ul.open li {
+    font-size: .92rem;
+    color: var(--muted);
+    padding-left: 22px;
+    position: relative;
+  }
+  ul.open li::before {
+    content: '○';
+    position: absolute;
+    left: 0;
+    color: var(--open);
+    font-size: .8em;
+    top: .35em;
+  }
+  ul.open li strong { color: var(--text); font-weight: 600; }
+
+  footer {
+    max-width: 760px;
+    margin: 22px auto 0;
+    padding: 0 4px;
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--faint);
+  }
+  footer a { color: var(--faint); }
+
+  .tldr {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: .8rem;
+  }
+  .tldr li { color: var(--pass); }
+  .tldr li::before { content: '✓ '; }
+  .tldr li span { color: var(--muted); font-weight: 400; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="term">
+    <div class="term-bar">
+      <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+      <span class="term-title">session.log — labs/</span>
+    </div>
+
+    <div class="term-body">
+      <h1><span class="prompt">$</span> claude --resume<span class="cursor">&nbsp;</span></h1>
+      <p class="lede">claude CLI 能不能被當成 subprocess 驅動，接進 LangGraph 的 <code>code_agent</code> 節點？三個依序驗證的最小實驗。</p>
+      <div class="meta">
+        <span><strong>日期</strong> 2026-09-11</span>
+        <span><strong>環境</strong> scratchpad（未設 ANTHROPIC_API_KEY）</span>
+        <span><strong>來源</strong> labs/</span>
+      </div>
+    </div>
+
+    <ul class="tldr" style="padding:22px 44px 0; margin-top:0">
+      <li>免 API key <span>— 靠現有訂閱登入就能跑，不用另外申請</span></li>
+      <li>resume 跨 process 有效 <span>— session_id 可直接存進 LangGraph state，下一輪接續</span></li>
+      <li>真跑過 LangGraph demo <span>— 兩輪呼叫都正確接住上下文，不是塞更多文字硬湊</span></li>
+    </ul>
+
+    <section>
+      <h2>背景</h2>
+      <p>Python Claude Agent SDK 強制走獨立計費的 <code>ANTHROPIC_API_KEY</code>，不能沿用個人訂閱登入。Alan 提到 <code>claude</code> CLI 接 Discord 能跑，於是驗證 CLI 這條路技術上通不通。</p>
+      <p>三個測試依序驗證、彼此有依賴：認證 → session resume 跨 process → 自訂 <code>session_id</code>。全程純文字問答，排除工具權限這個變因。</p>
+    </section>
+
+    <div class="test">
+      <div class="test-head">
+        <h3>TEST 1 <span>— 免 API key 能不能跑</span></h3>
+        <span class="badge">PASS</span>
+      </div>
+      <pre class="cmd"><span class="p">$</span> claude -p <span class="o">"Reply with exactly the single word: PONG"</span> --output-format json
+<span class="c">&gt;</span> result: <span class="o">"PONG"</span>
+<span class="c">&gt;</span> session_id: <span class="o">af985dea-3d1b-4f97-a199-fc1ab573876d</span></pre>
+      <p class="concl">免 API key，靠現有訂閱登入即可。</p>
+    </div>
+
+    <div class="test">
+      <div class="test-head">
+        <h3>TEST 2 <span>— resume 能不能跨 process</span></h3>
+        <span class="badge">PASS</span>
+      </div>
+      <pre class="cmd"><span class="p">$</span> claude -p <span class="o">"我上一則訊息要求你回覆的字是什麼？"</span> \
+    --output-format json --resume af985dea-3d1b-...
+<span class="c">&gt;</span> result: <span class="o">"PONG"</span>
+<span class="c">&gt;</span> session_id: 維持不變</pre>
+      <p class="concl">跨 process 有效，<code>session_id</code> 可直接存進 LangGraph state。</p>
+    </div>
+
+    <div class="test">
+      <div class="test-head">
+        <h3>TEST 3 <span>— 能不能自訂 session_id</span></h3>
+        <span class="badge">PASS</span>
+      </div>
+      <pre class="cmd"><span class="p">$</span> MYID=$(python3 -c <span class="o">"import uuid; print(uuid.uuid4())"</span>)
+<span class="p">$</span> claude -p <span class="o">"Remember this secret code: BLUE-42"</span> --session-id $MYID
+<span class="p">$</span> claude -p <span class="o">"What was the secret code?"</span> --resume $MYID
+<span class="c">&gt;</span> result: <span class="o">"BLUE-42"</span></pre>
+      <p class="concl">呼叫前可先 <code>uuid.uuid4()</code> 產生 ID 寫進 state，不用等回應。</p>
+    </div>
+
+    <section>
+      <h2>登入機制與部署差異</h2>
+      <p><code>claude login</code> 憑證存在 <code>~/.claude/.credentials.json</code>，綁 OS 帳號，自動讀取。</p>
+      <div class="cards">
+        <div class="card">
+          <span class="tag">本機執行</span>
+          <p>沿用個人 <code>claude login</code>，沒問題。</p>
+        </div>
+        <div class="card warn">
+          <span class="tag">共用 server</span>
+          <p>用量全算在登入者頭上，帳密一換就斷線——組織級憑證（如 Azure Foundry）更合適。</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>真實 LangGraph demo</h2>
+      <p><code>labs/claude_cli_langgraph_demo.ipynb</code> 真的打 API，跑兩輪 <code>code_agent_real</code> node，驗證 <code>--resume</code> 是否真的接住上下文。</p>
+      <p class="round-label" style="margin-bottom:6px">怎麼接</p>
+      <pre class="cmd">state 多一個 <span class="o">cli_session_id</span> 欄位
+node 內 <span class="p">subprocess.run</span>([<span class="o">"claude", "-p", prompt, "--resume", session_id</span>])
+回傳的 result / session_id 寫回 state，下一輪原封不動帶著走</pre>
+      <div class="round">
+        <div class="round-label">ROUND 1 — requirement</div>
+        <p>幫 Flask app 加 <code>/health</code> 端點的計畫……</p>
+        <div class="round-label" style="margin-top:14px">ROUND 2 — 只給 review 意見，不重複需求</div>
+        <p class="echo">「上一輪的計畫是：新增 <code>/health</code> 路由⋯」＋補充測試方式</p>
+      </div>
+      <p class="concl" style="margin-top:16px">兩輪 <code>session_id</code> 一致，第二輪確實提到「測試」——是真的靠 <code>--resume</code> 接住的。</p>
+    </section>
+
+    <section>
+      <h2>整體結論</h2>
+      <div class="summary">
+        <span class="big">3/3</span>
+        <span class="label">PASS — CLI subprocess 驅動 code_agent<br>技術上是通的</span>
+      </div>
+      <p>免 API key、resume 跨 process 有效、session_id 可預先指定。</p>
+    </section>
+
+    <section>
+      <h2>還沒驗證</h2>
+      <ul class="open">
+        <li><strong>工具呼叫權限</strong> — <code>--allowedTools</code>/<code>--restricted</code> 沒測</li>
+        <li><strong>結構化輸出</strong> — <code>--json-schema</code> 沒測</li>
+        <li><strong>失敗情境</strong> — 逾時、<code>is_error</code>、超額怎麼接 <code>review_gate</code></li>
+        <li><strong>政策 / 合規</strong> — 需跟訂閱合約窗口確認</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <footer>來源：labs/claude_cli_subprocess_session_resume.md · labs/claude_cli_langgraph_demo.ipynb</footer>
+</div>
+</body>
+</html>
