@@ -326,7 +326,7 @@ graph TD;
 	class human_checkpoint human
       </pre>
       </div>
-      <div class="diagram-slot" id="slot-a2" hidden>
+      <div class="diagram-slot" id="slot-a2">
       <pre class="mermaid">
 graph TD;
 	__start__(["__start__"]):::startend
@@ -517,7 +517,7 @@ graph TD;
   }
 
   mermaid.initialize({
-    startOnLoad: true,
+    startOnLoad: false,
     theme: 'dark',
     securityLevel: 'loose',
     flowchart: { htmlLabels: true, curve: 'basis', padding: 14, nodeSpacing: 36, rankSpacing: 52 },
@@ -532,6 +532,13 @@ graph TD;
       fontFamily: 'IBM Plex Sans, sans-serif',
       edgeLabelBackground: '#1c2029'
     }
+  });
+
+  // Both diagrams must be visible while mermaid measures/lays out text —
+  // rendering into a display:none container fails with a misleading
+  // "Syntax error in text". Render first, then hide the inactive tab.
+  mermaid.run({ querySelector: '.mermaid' }).then(() => {
+    document.getElementById('slot-a2').hidden = true;
   });
 </script>
 </body>
