@@ -493,7 +493,9 @@ graph TD;
       <div class="layer-body">
         <h4>失敗路徑、真正接上 Claude Code</h4>
         <p>每個 agent 節點目前都是回傳假字串的 Python stub，重試／衝突分支從沒真的執行過
-        （因為 stub 永遠回 PASS）。這是刻意的——sketch 定完形狀，接線是下一步。</p>
+        （因為 stub 永遠回 PASS）。這是刻意的——sketch 定完形狀，接線是下一步。
+        接線本身的可行性已經用真的 <code>claude</code> CLI 測過（不是紙上談兵）：
+        <a href="../labs-cli-experiment.html">labs CLI 實驗</a>。</p>
       </div>
     </div>
   </section>
