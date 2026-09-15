@@ -223,6 +223,7 @@
   .callout p:last-child { margin-bottom: 0; }
   .callout.verified { --callout-color: var(--good); }
   .callout.caveat { --callout-color: var(--bad); }
+  .callout.tip { --callout-color: var(--accent-a); }
   .verdict-pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; margin-right: 8px; }
   .verdict-pill.pass { background: var(--good-soft); color: var(--good); }
   mark.hl { background: var(--good-soft); color: var(--good); padding: 0 4px; border-radius: 4px; font-weight: 600; }
@@ -433,6 +434,29 @@ graph TD;
           <li><span class="mark">−</span>認領順序可能因時間差而不同，較難重播</li>
         </ul>
       </div>
+    </div>
+  </section>
+
+  <section id="pick">
+    <h2>怎麼選</h2>
+    <p class="section-note">
+      節點分工、能不能中途卡住問人，兩邊完全一樣。真正的差異在分工的時機：
+      A 是事先把 change 讀過一遍，照「看起來會不會衝突」先分好堆（不是絕對保證不衝突，
+      只是預判），同一堆才一起做；A2 是全部直接丟上黑板，誰做完誰就去接下一個還沒人碰的。
+    </p>
+    <div class="callout tip">
+      <h4>slice 大小都差不多 → 選 A</h4>
+      <p>
+        固定波次就夠用。換成 A2 那套動態搶任務的複雜度，換不到什麼好處——
+        多出來的只有「同樣輸入重跑，誰做哪個 slice 可能每次不一樣」這種除錯上的麻煩。
+      </p>
+    </div>
+    <div class="callout tip">
+      <h4>工作量落差很大、想讓快的人多做一點 → 選 A2</h4>
+      <p>
+        誰先做完誰去搶下一個，不會被同一波裡最慢的那個拖住——示例裡 5 輪 vs 6 輪
+        就是這個效果的縮影。代價是排程結果不再是決定性的，比較難重播、除錯。
+      </p>
     </div>
   </section>
 
