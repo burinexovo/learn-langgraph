@@ -271,7 +271,7 @@
       </button>
       <button class="diagram-tab" id="tab-a2" data-active="false" onclick="showDiagram('a2')">
         <span class="name">A2 · 黑板派工</span>
-        <span class="desc">12 節點 · worker 動態認領不衝突的任務</span>
+        <span class="desc">14 節點 · worker 動態認領不衝突的任務</span>
       </button>
     </div>
 
@@ -335,41 +335,46 @@ graph TD;
 	align_requirements --> plan_slices;
 	plan_slices --> post_to_blackboard;
 	post_to_blackboard --> blackboard_dispatch;
-	blackboard_dispatch -->|"全部 slice 都 done"| merge_all;
+	blackboard_dispatch -.->|"Send() 分派 worker"| blackboard_worker;
+	blackboard_worker --> check_blackboard_progress;
+	check_blackboard_progress -.->|"還有沒做完的"| blackboard_dispatch;
+	check_blackboard_progress -.->|"全部 slice 都 done"| merge_all;
 	merge_all -.->|"有衝突"| resolve_conflict;
-	merge_all -->|"沒衝突"| test_agent;
+	merge_all -.->|"沒衝突"| test_agent;
 	merge_all --> review_agent;
 	resolve_conflict -.->|"重設回 unclaimed"| blackboard_dispatch;
 	test_agent --> synthesize_verdict;
 	review_agent --> synthesize_verdict;
 	synthesize_verdict --> review_gate;
 	review_gate -.->|"沒過，重新鋪回黑板"| post_to_blackboard;
-	review_gate -->|"過了 / 連兩輪失敗"| human_checkpoint;
+	review_gate -.->|"過了 / 連兩輪失敗"| human_checkpoint;
 	human_checkpoint -.->|"駁回"| align_requirements;
-	human_checkpoint -->|"核准"| push_or_mr;
+	human_checkpoint -.->|"核准"| push_or_mr;
 	__end__(["__end__"]):::startend
 	push_or_mr --> __end__;
 	align_requirements["align_requirements\n對齊需求，讀上一輪回饋"]
 	plan_slices["plan_slices\n拆成多個 OpenSpec change"]
-	review_agent["review_agent\nPASS/FAIL（示意）"]
-	test_agent["test_agent\nPASS/FAIL（示意）"]
-	synthesize_verdict["synthesize_verdict\n綜合判斷這輪過不過"]
 	post_to_blackboard["post_to_blackboard\n全部 slice 寫成 unclaimed"]
-	blackboard_dispatch["blackboard_dispatch\nN 個 worker 動態認領\n不確定會問人"]
+	blackboard_dispatch["blackboard_dispatch\n派工掛點，真正邏輯在 fanout_workers"]
+	blackboard_worker["blackboard_worker\n認領一個任務、做完就回傳\nSend() 平行分支・不確定會問人"]
+	check_blackboard_progress["check_blackboard_progress\n還有沒做完的嗎？"]
 	merge_all["merge_all\n全部 slice 做完才合併"]
 	resolve_conflict["resolve_conflict\n衝突的 slice 重設回 unclaimed"]
+	test_agent["test_agent\nPASS/FAIL（示意）"]
+	review_agent["review_agent\nPASS/FAIL（示意）"]
+	synthesize_verdict["synthesize_verdict\n綜合判斷這輪過不過"]
 	review_gate["review_gate\n沒過重派，過了才給人看"]
-	push_or_mr["push_or_mr\n核准後推送 / 開 MR"]
 	human_checkpoint["human_checkpoint\n人核准或打回去"]
+	push_or_mr["push_or_mr\n核准後推送 / 開 MR"]
 
 	classDef startend fill:transparent,stroke:#7b8494,stroke-width:1.5px,stroke-dasharray:3 3,color:#9aa2b1
 	classDef fullAgent fill:#23325c,stroke:#7d95f2,stroke-width:1.5px,color:#e4e9ff
 	classDef narrowLlm fill:#4a3416,stroke:#e0954c,stroke-width:1.5px,color:#ffe9cf
 	classDef control fill:#242a35,stroke:#8791a3,stroke-width:1.5px,color:#e4e7ee
 	classDef human fill:#33234f,stroke:#b28aef,stroke-width:1.5px,color:#f1e6ff
-	class align_requirements fullAgent
+	class align_requirements,blackboard_worker fullAgent
 	class plan_slices,test_agent,review_agent,synthesize_verdict narrowLlm
-	class post_to_blackboard,blackboard_dispatch,merge_all,resolve_conflict,review_gate,push_or_mr control
+	class post_to_blackboard,blackboard_dispatch,check_blackboard_progress,merge_all,resolve_conflict,review_gate,push_or_mr control
 	class human_checkpoint human
       </pre>
       </div>
@@ -386,8 +391,8 @@ graph TD;
       <div class="stat a"><div class="label">A 節點數</div><div class="value">14</div></div>
       <div class="stat a"><div class="label">A 邊數</div><div class="value">18</div></div>
       <div class="stat a"><div class="label">A 完成輪數（示例）</div><div class="value">6<span class="unit">輪</span></div></div>
-      <div class="stat a2"><div class="label">A2 節點數</div><div class="value">12</div></div>
-      <div class="stat a2"><div class="label">A2 邊數</div><div class="value">15</div></div>
+      <div class="stat a2"><div class="label">A2 節點數</div><div class="value">14</div></div>
+      <div class="stat a2"><div class="label">A2 邊數</div><div class="value">18</div></div>
       <div class="stat a2"><div class="label">A2 完成輪數（示例）</div><div class="value">5<span class="unit">輪</span></div></div>
     </div>
   </section>
@@ -448,13 +453,15 @@ graph TD;
       </p>
     </div>
 
-    <div class="callout caveat">
-      <h4><span class="verdict-pill gap">A2 · 誠實的限制</span>這份 sketch 沒辦法示範同一件事</h4>
+    <div class="callout verified">
+      <h4><span class="verdict-pill pass">A2 · 也真的測過</span>真正平行的 worker 分支，同樣驗證通過</h4>
       <p>
-        機制在真實部署下一樣成立（甚至更自然，因為 A2 的 worker 本來就是外部獨立
-        process）。但 <code>blackboard_dispatch</code> 是單一 process 內的同步 Python
-        迴圈在模擬多個 worker，不是真的平行分支——在裡面呼叫 <code>interrupt()</code>
-        會凍結整個節點，連帶卡住所有還在跑的 worker，不是只卡住問問題的那一個。
+        <code>blackboard_dispatch</code> 用 <code>Send</code> 把每個 worker 拆成真正獨立的分支
+        （<code>blackboard_worker</code>），每個分支一次只認領、只做一個任務；要不要再派一輪由
+        <code>check_blackboard_progress</code> 在圖的層級決定，跟 A 的 <code>advance_or_finish</code>
+        同一招。三個平行 worker 裡一個卡在 <code>slice-needs-human</code> 問問題，另外兩個照樣
+        認領、照樣做完，答完之後正確併回 <code>code_changes</code>，同一批的其他 worker 完全沒
+        被拖累。
       </p>
     </div>
 
