@@ -27,7 +27,7 @@ optimistic concurrency control（重試前重讀最新狀態，不是拿舊狀�
 流程拓樸（merge → 偵測衝突 → resolve_conflict → 迴圈導回重新分派）本身沒問題，落差在節點
 *裡面*要做的事，不是圖的形狀。
 
-## 開發過程中遇到不明確的環境類問題，要有一個問題佇列丟給人回答（想法，還沒定案）
+## 開發過程中遇到不明確的環境類問題，要有一個問題佇列丟給人回答（已定案，還沒接線）
 
 構想：跑 `code_agent`/`blackboard_dispatch` 這類會真的動手做事的節點時，如果遇到不是「這段
 程式邏輯該怎麼寫」這種可以自己判斷的問題，而是環境層級的不確定（例如缺哪個 `.env` 變數、
@@ -35,8 +35,29 @@ optimistic concurrency control（重試前重讀最新狀態，不是拿舊狀�
 `interrupt()`，而是丟進一個獨立的「問題佇列」，讓其他還能做的工作繼續跑，等人有空再回頭批次
 回答佇列裡的問題。
 
-還沒想清楚的地方（回公司再想）：
-- 這個佇列跟現有的 `human_checkpoint`/`interrupt()` 機制是什麼關係——是取代，還是分成兩種
-  不同性質的中斷（「方向對不對」用 `human_checkpoint`，「環境參數是什麼」用問題佇列）？
-- 佇列要放在哪裡（黑板 store？獨立的 state 欄位？）、怎麼跟卡住的那個 slice/worker 對應回去？
-- 人回答之後，怎麼讓原本卡住的那個 worker/任務接著往下做，而不是要整批重來？
+原本三個沒想清楚的地方，這輪討論定案，答案都是「用已經驗證過的機制接上，不用新蓋一套」：
+
+- **跟現有的 `human_checkpoint`/`interrupt()` 機制是什麼關係？**
+  不是取代，是兩種不同層級的中斷，但底層機制是同一個 `interrupt()`。`human_checkpoint` 問的是
+  「方向對不對」，一輪只問一次，會擋住整條線；環境類問題發生在單一 slice 裡，不該擋到其他
+  slice。用 interrupt payload 裡的一個 `kind` 欄位分辨（`"direction"` vs `"env_question"`），
+  不用蓋兩套機制，也不用改 LangGraph 的中斷/續跑流程。
+
+- **佇列要放在哪裡？**
+  不需要另外蓋一個佇列資料結構——LangGraph 每次 `invoke()`/`stream()` 回傳的
+  `state["__interrupt__"]` 本身就是「目前卡住的問題列表」，而且已經實測過（見
+  `notebooks/arch/A_full_custom_langgraph.ipynb`「驗證 `code_agent` 中途卡住問問題」那段）：
+  多個平行 slice 同時卡住，每個都有自己獨立的 interrupt id，互不影響。真正缺的只是一層
+  「把好幾波、好幾個 slice 累積下來的 `__interrupt__` 收集起來給人看」的外部小工具（可以只是
+  一個 `{interrupt_id: 問題內容}` 的 dict），不需要動 graph 本身的 state schema。這層小工具也是
+  「動態優先度」（例如卡越久的排前面）該放的地方——純粹是外部排序邏輯，不影響 graph 設計。
+
+- **人回答之後，怎麼接回去？**
+  已經驗證過：`Command(resume={interrupt_id: 答案})` 用同一個 `thread_id` 送回去，只會接續
+  那一個卡住的 slice，其他已經做完的 slice 不會被動到。中間如果要來回討論，那個討論發生在
+  graph 外面（人跟 agent 聊），只有討論完的「最終答案」才送進去 resume，graph 完全不需要知道
+  中間討論過幾輪。
+
+還沒做的事：A/A2 的 `code_agent`/`blackboard_dispatch` 目前 interrupt payload 只有
+`{"slice_id": ..., "question": ...}`，還沒加上 `kind` 欄位；也還沒寫「收集多個 thread 的
+`__interrupt__`」那層外部小工具（不屬於 graph 本身，屬於部署時的 harness）。
