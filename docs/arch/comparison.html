@@ -225,6 +225,7 @@
   .callout.caveat { --callout-color: var(--bad); }
   .verdict-pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; margin-right: 8px; }
   .verdict-pill.pass { background: var(--good-soft); color: var(--good); }
+  mark.hl { background: var(--good-soft); color: var(--good); padding: 0 4px; border-radius: 4px; font-weight: 600; }
   .verdict-pill.gap { background: var(--bad-soft); color: var(--bad); }
 
   /* ---- completion ---- */
@@ -494,10 +495,10 @@ graph TD;
         <h4>失敗路徑、真正接上 Claude Code</h4>
         <p>每個 agent 節點目前都是回傳假字串的 Python stub，重試／衝突分支從沒真的執行過
         （因為 stub 永遠回 PASS）。這是刻意的——sketch 定完形狀，接線是下一步。
-        但接線本身的可行性不是沒把握：不設 <code>ANTHROPIC_API_KEY</code>、靠既有的
-        <code>claude login</code> 就能跑 CLI，跨 process 用 <code>--resume</code>
-        接續上一輪上下文——這兩件事都真的執行、真的檢查過結果，不是猜的。欠的是把這條
-        真的能動的路徑，接進上面這些 stub 節點裡。</p>
+        但接線本身的可行性不是沒把握，兩件事都真的執行、真的檢查過結果，不是猜的：
+        <mark class="hl">不設 API key，靠既有 <code>claude login</code> 就能跑 CLI</mark>、
+        <mark class="hl">跨 process 用 <code>--resume</code> 接續上一輪上下文</mark>。
+        欠的是把這條真的能動的路徑，接進上面這些 stub 節點裡。</p>
       </div>
     </div>
   </section>
