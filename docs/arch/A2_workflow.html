@@ -101,7 +101,7 @@ graph TD;
 	test_agent["<b>test_agent</b><br/><span class='sub'>PASS/FAIL（示意）</span>"]
 	synthesize_verdict["<b>synthesize_verdict</b><br/><span class='sub'>綜合判斷這輪過不過</span>"]
 	post_to_blackboard["<b>post_to_blackboard</b><br/><span class='sub'>全部 slice 寫成 unclaimed</span>"]
-	blackboard_dispatch["<b>blackboard_dispatch</b><br/><span class='sub'>N 個 worker 動態認領</span><br/><span class='tagline'>外部獨立 process（模擬）</span>"]
+	blackboard_dispatch["<b>blackboard_dispatch</b><br/><span class='sub'>N 個 worker 動態認領</span><br/><span class='tagline'>外部獨立 process（模擬）・不確定會問人</span>"]
 	merge_all["<b>merge_all</b><br/><span class='sub'>全部 slice 做完才合併</span>"]
 	resolve_conflict["<b>resolve_conflict</b><br/><span class='sub'>衝突的 slice 重設回 unclaimed</span>"]
 	review_gate["<b>review_gate</b><br/><span class='sub'>沒過重派，過了才給人看</span>"]

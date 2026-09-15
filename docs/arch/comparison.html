@@ -301,7 +301,7 @@ graph TD;
 	__end__(["__end__"]):::startend
 	push_or_mr --> __end__;
 	align_requirements["align_requirements\n對齊需求，讀上一輪回饋"]
-	code_agent["code_agent\n每個 slice 一次 CLI 呼叫"]
+	code_agent["code_agent\n每個 slice 一次 CLI 呼叫\n不確定會問人"]
 	plan_slices["plan_slices\n拆成多個 OpenSpec change"]
 	test_agent["test_agent\nPASS/FAIL（示意）"]
 	review_agent["review_agent\nPASS/FAIL（示意）"]
@@ -354,7 +354,7 @@ graph TD;
 	test_agent["test_agent\nPASS/FAIL（示意）"]
 	synthesize_verdict["synthesize_verdict\n綜合判斷這輪過不過"]
 	post_to_blackboard["post_to_blackboard\n全部 slice 寫成 unclaimed"]
-	blackboard_dispatch["blackboard_dispatch\nN 個 worker 動態認領"]
+	blackboard_dispatch["blackboard_dispatch\nN 個 worker 動態認領\n不確定會問人"]
 	merge_all["merge_all\n全部 slice 做完才合併"]
 	resolve_conflict["resolve_conflict\n衝突的 slice 重設回 unclaimed"]
 	review_gate["review_gate\n沒過重派，過了才給人看"]
