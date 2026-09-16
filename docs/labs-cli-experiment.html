@@ -287,12 +287,14 @@
       <li>免 API key <span>— 靠現有訂閱登入就能跑，不用另外申請</span></li>
       <li>resume 跨 process 有效 <span>— session_id 可直接存進 LangGraph state，下一輪接續</span></li>
       <li>真跑過 LangGraph demo <span>— 兩輪呼叫都正確接住上下文，不是塞更多文字硬湊</span></li>
+      <li>Agent SDK 是同一條路 <span>— 翻原始碼證實底層也是呼叫本機 CLI，不是另一套機制（見下方新增章節）</span></li>
     </ul>
 
     <section>
       <h2>背景</h2>
-      <p>Python Claude Agent SDK 強制走獨立計費的 <code>ANTHROPIC_API_KEY</code>，不能沿用個人訂閱登入。Alan 提到 <code>claude</code> CLI 接 Discord 能跑，於是驗證 CLI 這條路技術上通不通。</p>
+      <p>一開始以為 Python Claude Agent SDK 強制走獨立計費的 <code>ANTHROPIC_API_KEY</code>，不能沿用個人訂閱登入。Alan 提到 <code>claude</code> CLI 接 Discord 能跑，於是驗證 CLI 這條路技術上通不通。</p>
       <p>三個測試依序驗證、彼此有依賴：認證 → session resume 跨 process → 自訂 <code>session_id</code>。全程純文字問答，排除工具權限這個變因。</p>
+      <p><strong>2026-09-16 更新</strong>：翻了 <code>claude_agent_sdk</code> 原始碼後發現，上面這個「背景」假設其實不準——細節見下面新增的「Agent SDK 底層機制」章節。</p>
     </section>
 
     <div class="test">
@@ -359,6 +361,19 @@ node 內 <span class="p">subprocess.run</span>([<span class="o">"claude", "-p", 
         <p class="echo">「上一輪的計畫是：新增 <code>/health</code> 路由⋯」＋補充測試方式</p>
       </div>
       <p class="concl" style="margin-top:16px">兩輪 <code>session_id</code> 一致，第二輪確實提到「測試」——是真的靠 <code>--resume</code> 接住的。</p>
+    </section>
+
+    <section>
+      <h2>Agent SDK 底層機制（2026-09-16 新增）</h2>
+      <p>同事測試 <code>claude_agent_sdk</code>（官方 Python/TS Agent SDK）發現不用另外設 API key 也能跑，跟這裡的實驗前提對不上，所以回頭翻了 SDK 原始碼（<code>_internal/transport/subprocess_cli.py</code>）確認到底怎麼回事。</p>
+      <pre class="cmd"><span class="c"># SDK 找執行檔的順序</span>
+內建二進位 → PATH 裡的 <span class="o">claude</span> → 幾個常見安裝路徑 → <span class="o">cli_path</span> 參數指定
+<span class="c"># 認證</span>
+SDK 程式碼完全不處理 API key，環境變數用繼承的，認證交給被叫起來的 <span class="o">claude</span> CLI 自己處理
+<span class="c"># 傳輸</span>
+subprocess + stdin/stdout 傳 NDJSON（一行一個 JSON），不是 HTTP</pre>
+      <p class="concl">結論：<strong>Agent SDK 底層也是 subprocess 呼叫本機 <code>claude</code> CLI</strong>，跟這頁做的實驗是同一條路，只是官方把 JSON 解析、session 管理封裝好了。SDK 只有這一種傳輸方式，沒有另一條「直接打 API」的路——那是完全不同的產品，叫 <strong>Client SDK</strong>（platform.claude.com），要自己刻工具迴圈。</p>
+      <p class="concl">認證跟這頁的 TEST 1 一樣是二選一，不是缺一不可：<code>claude login</code>（訂閱帳號）或是設 <code>ANTHROPIC_API_KEY</code>（Console 計量付費，不需要訂閱帳號）。CLI 執行檔要先裝好是唯一的硬性前提，登入方式隨便選。</p>
     </section>
 
     <section>
